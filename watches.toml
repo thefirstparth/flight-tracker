@@ -11,6 +11,7 @@
 #              (outbound first, then return). Leave it out to watch the
 #              CHEAPEST direct option on those dates, whichever airline.
 #   target   - optional: alert when the price falls to or below this (INR)
+#   trip     - optional: groups watches together on the dashboard
 #
 # A watch stops being checked once its departure date has passed.
 
@@ -38,6 +39,7 @@ missing_checks_alert = 3
 
 [[watch]]
 name = "Bengaluru - Singapore, IndiGo 6E 1457 / 6E 1458"
+trip = "Singapore, 2-7 March 2027"
 from = "BLR"
 to = "SIN"
 depart = "2027-03-02"
@@ -47,6 +49,7 @@ flights = ["6E 1457", "6E 1458"]
 
 [[watch]]
 name = "New Delhi - Singapore, IndiGo 6E 1203 / 6E 1204"
+trip = "Singapore, 2-7 March 2027"
 from = "DEL"
 to = "SIN"
 depart = "2027-03-02"
@@ -55,6 +58,7 @@ flights = ["6E 1203", "6E 1204"]
 
 [[watch]]
 name = "Bengaluru - Singapore, cheapest direct round trip"
+trip = "Singapore, 2-7 March 2027"
 from = "BLR"
 to = "SIN"
 depart = "2027-03-02"
@@ -62,6 +66,7 @@ return = "2027-03-07"
 
 [[watch]]
 name = "New Delhi - Singapore, cheapest direct round trip"
+trip = "Singapore, 2-7 March 2027"
 from = "DEL"
 to = "SIN"
 depart = "2027-03-02"
@@ -72,6 +77,7 @@ return = "2027-03-07"
 
 [[watch]]
 name = "Bengaluru - Phuket, IndiGo 6E 1217 / 6E 1218"
+trip = "Phuket, 22-26 January 2027"
 from = "BLR"
 to = "HKT"
 depart = "2027-01-22"
@@ -80,6 +86,7 @@ flights = ["6E 1217", "6E 1218"]
 
 [[watch]]
 name = "Bengaluru - Phuket, Akasa QP 623 / QP 624"
+trip = "Phuket, 22-26 January 2027"
 from = "BLR"
 to = "HKT"
 depart = "2027-01-22"
@@ -88,6 +95,7 @@ flights = ["QP 623", "QP 624"]
 
 [[watch]]
 name = "Bengaluru - Phuket, cheapest direct round trip"
+trip = "Phuket, 22-26 January 2027"
 from = "BLR"
 to = "HKT"
 depart = "2027-01-22"
@@ -95,6 +103,7 @@ return = "2027-01-26"
 
 [[watch]]
 name = "Bengaluru to Phuket one way, Akasa QP 623"
+trip = "Phuket, 22-26 January 2027"
 from = "BLR"
 to = "HKT"
 depart = "2027-01-22"
@@ -102,12 +111,14 @@ flights = ["QP 623"]
 
 [[watch]]
 name = "Bengaluru to Phuket one way, cheapest direct"
+trip = "Phuket, 22-26 January 2027"
 from = "BLR"
 to = "HKT"
 depart = "2027-01-22"
 
 [[watch]]
 name = "Phuket to Bengaluru one way, Akasa QP 624"
+trip = "Phuket, 22-26 January 2027"
 from = "HKT"
 to = "BLR"
 depart = "2027-01-26"
@@ -115,6 +126,7 @@ flights = ["QP 624"]
 
 [[watch]]
 name = "Phuket to Bengaluru one way, cheapest direct"
+trip = "Phuket, 22-26 January 2027"
 from = "HKT"
 to = "BLR"
 depart = "2027-01-26"

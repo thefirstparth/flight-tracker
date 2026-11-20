@@ -31,7 +31,7 @@ import time
 import tomllib
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
@@ -44,9 +44,24 @@ IST = timezone(timedelta(hours=5, minutes=30))
 SEARCH_ATTEMPTS = 5
 RETRY_WAIT_SECONDS = (3, 6, 10, 15)
 PAUSE_BETWEEN_SEARCHES = 2
-# Round trips: how many outbound flights to price returns for. Direct routes
-# rarely have more than a handful of flights a day.
-ROUND_TRIP_OUTBOUND_OPTIONS = 8
+# Round trips: Google's outbound list already shows each outbound flight's
+# cheapest round-trip price, so returns are priced only for the watched
+# outbound flights plus this many of the cheapest ones.
+ROUND_TRIP_CHEAPEST_OUTBOUND = 2
+ROUND_TRIP_OUTBOUND_OPTIONS = 8  # fallback path (library's own expansion)
+# Full re-searches of a round trip when a watched pair is still missing
+# (each request inside is already retried).
+ROUND_TRIP_ATTEMPTS = 2
+# After this many seconds a run stops retrying, so a bad day at Google
+# cannot use up GitHub Actions minutes. Whatever was found is still saved.
+RUN_BUDGET_SECONDS = 8 * 60
+_deadline: float | None = None
+
+
+def out_of_time() -> bool:
+    return _deadline is not None and time.monotonic() > _deadline
+
+
 # Checks in a row with no prices at all before a "tracker broken" alert.
 BROKEN_RUNS_ALERT = 3
 
@@ -69,6 +84,7 @@ DEFAULT_SETTINGS = {
     "rise_alert_rupees": 1000,
     "rise_alert_percent": 10,
     "missing_checks_alert": 3,
+    "send_dashboard": True,  # attach the dashboard file to summaries
 }
 
 
@@ -86,6 +102,11 @@ class Watch:
     ret: str | None
     flights: tuple[str, ...] | None  # None = cheapest direct option
     target: float | None
+    trip: str = ""  # groups watches on the dashboard
+
+    @property
+    def search_id(self) -> str:
+        return search_id(self.search_key)
 
     @property
     def search_key(self) -> tuple:
@@ -97,6 +118,14 @@ class Option:
     price: float
     flights: tuple[str, ...]
     times: tuple[str, ...]
+    # Per leg: {"flight", "airline", "from", "to", "dep", "arr", "minutes"}
+    # (local airport times, ISO format). Not used for comparisons.
+    legs: tuple = field(default=(), compare=False)
+
+
+def search_id(key: tuple) -> str:
+    origin, destination, depart, ret = key
+    return "|".join([origin, destination, depart, ret or ""])
 
 
 class ConfigError(Exception):
@@ -120,6 +149,11 @@ def _date_text(value, field: str, name: str) -> str:
 
 def slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def default_trip(origin: str, destination: str, depart: str, ret: str | None) -> str:
+    a, b = sorted((origin, destination))
+    return f"{a} - {b}, {depart}" + (f" to {ret}" if ret else "")
 
 
 def load_config(path: Path) -> tuple[dict, list[Watch]]:
@@ -157,7 +191,8 @@ def load_config(path: Path) -> tuple[dict, list[Watch]]:
                 raise ConfigError(
                     f"watch {name!r}: list {legs} flight(s) (one per direction), got {len(flights)}")
         target = float(w["target"]) if w.get("target") else None
-        watches.append(Watch(wid, name, origin, destination, depart, ret, flights, target))
+        trip = str(w.get("trip") or default_trip(origin, destination, depart, ret))
+        watches.append(Watch(wid, name, origin, destination, depart, ret, flights, target, trip))
     return settings, watches
 
 
@@ -170,7 +205,7 @@ def _flight_code(leg) -> str:
     return f"{airline} {int(leg.flight_number) if str(leg.flight_number).isdigit() else leg.flight_number}"
 
 
-def _search_once(key: tuple, settings: dict) -> list[Option]:
+def _search_once(key: tuple, settings: dict, needed: set[tuple] = frozenset()) -> list[Option]:
     from fli.core.builders import build_flight_segments
     from fli.models import Airport, FlightSearchFilters, MaxStops, PassengerInfo, SortBy
     from fli.search import SearchFlights
@@ -187,10 +222,12 @@ def _search_once(key: tuple, settings: dict) -> list[Option]:
         stops=MaxStops.NON_STOP if settings["direct_only"] else MaxStops.ANY,
         sort_by=SortBy.CHEAPEST,
     )
-    results = SearchFlights().search(
-        filters, top_n=ROUND_TRIP_OUTBOUND_OPTIONS,
-        currency=settings["currency"], country="IN", language="en",
-    ) or []
+    client = SearchFlights()
+    locale = dict(currency=settings["currency"], country="IN", language="en")
+    if ret and hasattr(client, "_fetch_flights"):
+        results = _round_trip(client, filters, locale, {f[0] for f in needed})
+    else:
+        results = client.search(filters, top_n=ROUND_TRIP_OUTBOUND_OPTIONS, **locale) or []
     options = []
     for result in results:
         parts = result if isinstance(result, tuple) else (result,)
@@ -205,8 +242,67 @@ def _search_once(key: tuple, settings: dict) -> list[Option]:
             price=float(price),
             flights=tuple(_flight_code(leg) for leg in legs),
             times=tuple(leg.departure_datetime.strftime("%-d %b %H:%M") for leg in legs),
+            legs=tuple({
+                "flight": _flight_code(leg),
+                "airline": AIRLINE_NAMES.get(_flight_code(leg).split()[0], ""),
+                "from": getattr(leg.departure_airport, "name", str(leg.departure_airport)).removeprefix("_"),
+                "to": getattr(leg.arrival_airport, "name", str(leg.arrival_airport)).removeprefix("_"),
+                "dep": leg.departure_datetime.strftime("%Y-%m-%dT%H:%M"),
+                "arr": leg.arrival_datetime.strftime("%Y-%m-%dT%H:%M"),
+                "minutes": int(leg.duration),
+            } for leg in legs),
         ))
     return options
+
+
+def _with_retries(fn, what: str):
+    """Call fn() until it returns results, waiting a little between tries."""
+    for attempt in range(SEARCH_ATTEMPTS):
+        try:
+            result = fn()
+        except Exception as e:
+            log(f"    {what}, try {attempt + 1}: {type(e).__name__}: {e}")
+            result = None
+        if result:
+            return result
+        if out_of_time():
+            log(f"    {what}: run time budget used up, not retrying")
+            return None
+        if attempt < SEARCH_ATTEMPTS - 1:
+            time.sleep(RETRY_WAIT_SECONDS[min(attempt, len(RETRY_WAIT_SECONDS) - 1)])
+    log(f"    {what}: no answer after {SEARCH_ATTEMPTS} tries")
+    return None
+
+
+def _round_trip(client, filters, locale, watched_outbound: set[str]) -> list[tuple]:
+    """Price round trips one outbound flight at a time.
+
+    The library prices returns for all outbound flights in parallel and
+    silently drops any whose request hits Google's random error, so exact
+    flight pairs could go "missing". Here each outbound flight's return
+    prices are fetched on their own, with retries, and only for the watched
+    outbound flights and the cheapest few (the outbound list's price is the
+    cheapest round trip with that flight, so the cheapest pair is always found).
+    """
+    from copy import deepcopy
+
+    outbound = _with_retries(lambda: client._fetch_flights(filters, capture_session=True, **locale),
+                             "outbound list") or []
+    def code(ob):
+        return " + ".join(_flight_code(leg) for leg in ob.legs)
+    by_price = sorted(outbound, key=lambda ob: ob.price if ob.price is not None else float("inf"))
+    chosen = by_price[:ROUND_TRIP_CHEAPEST_OUTBOUND] + [ob for ob in by_price[ROUND_TRIP_CHEAPEST_OUTBOUND:]
+                                                       if code(ob) in watched_outbound]
+    combos = []
+    for i, ob in enumerate(chosen):
+        if i:
+            time.sleep(1)
+        sub = deepcopy(filters)
+        sub.flight_segments[0].selected_flight = ob
+        label = "returns for " + code(ob)
+        returns = _with_retries(lambda: client._fetch_flights(sub, capture_session=False, **locale), label)
+        combos.extend((ob, r) for r in returns or [])
+    return combos
 
 
 def fetch_options(key: tuple, settings: dict, needed: set[tuple], search=_search_once,
@@ -217,20 +313,25 @@ def fetch_options(key: tuple, settings: dict, needed: set[tuple], search=_search
     `needed` has been seen. Returns None if no attempt gave any result.
     """
     merged: dict[tuple, Option] = {}
-    for attempt in range(SEARCH_ATTEMPTS):
+    attempts = ROUND_TRIP_ATTEMPTS if key[3] else SEARCH_ATTEMPTS
+    for attempt in range(attempts):
         try:
-            options = search(key, settings)
+            options = search(key, settings, needed)
         except ConfigError:
             raise
         except Exception as e:  # network trouble or a changed response format
             log(f"    attempt {attempt + 1}: {type(e).__name__}: {e}")
             options = []
+        if not options:
+            log(f"    attempt {attempt + 1}: no results")
         for o in options:
             if o.flights not in merged or o.price < merged[o.flights].price:
                 merged[o.flights] = o
         if merged and needed <= merged.keys():
             break
-        if attempt < SEARCH_ATTEMPTS - 1:
+        if out_of_time():
+            break
+        if attempt < attempts - 1:
             sleep(RETRY_WAIT_SECONDS[min(attempt, len(RETRY_WAIT_SECONDS) - 1)])
     return sorted(merged.values(), key=lambda o: (o.price, o.times)) or None
 
@@ -405,7 +506,23 @@ def _telegram(token: str, chat_id: str, text: str) -> None:
                 raise RuntimeError(f"Telegram answered HTTP {resp.status}")
 
 
-def _email(text: str) -> None:
+def _telegram_document(token: str, chat_id: str, path: Path, caption: str) -> None:
+    boundary = "----flighttracker" + os.urandom(8).hex()
+    parts = []
+    for name, value in (("chat_id", chat_id), ("caption", caption[:1000])):
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+    parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name="document"; filename="{path.name}"\r\n'
+                  "Content-Type: text/html\r\n\r\n").encode() + path.read_bytes() + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode())
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendDocument", data=b"".join(parts),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        if resp.status != 200:
+            raise RuntimeError(f"Telegram answered HTTP {resp.status}")
+
+
+def _email(text: str, attachment: Path | None = None) -> None:
     to = os.environ["EMAIL_TO"]
     sender = os.environ.get("EMAIL_FROM") or os.environ.get("EMAIL_USERNAME") or to
     username = os.environ.get("EMAIL_USERNAME") or sender
@@ -413,6 +530,8 @@ def _email(text: str) -> None:
     msg["Subject"] = text.splitlines()[0][:120]
     msg["From"], msg["To"] = sender, to
     msg.set_content(text)
+    if attachment:
+        msg.add_attachment(attachment.read_bytes(), maintype="text", subtype="html", filename=attachment.name)
     host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     port = int(os.environ.get("SMTP_PORT", "465"))
     with smtplib.SMTP_SSL(host, port, timeout=30) as smtp:
@@ -420,9 +539,11 @@ def _email(text: str) -> None:
         smtp.send_message(msg)
 
 
-def send(text: str, dry_run: bool) -> bool:
-    """Print the message and send it to every configured channel."""
+def send(text: str, dry_run: bool, attachment: Path | None = None) -> bool:
+    """Print the message and send it (plus an optional file) to every configured channel."""
     print("\n----- message -----\n" + text + "\n-------------------")
+    if attachment:
+        print(f"(attached: {attachment.name})")
     if dry_run:
         return True
     ok, used = True, False
@@ -430,6 +551,9 @@ def send(text: str, dry_run: bool) -> bool:
         used = True
         try:
             _telegram(os.environ["TELEGRAM_BOT_TOKEN"], os.environ["TELEGRAM_CHAT_ID"], text)
+            if attachment:
+                _telegram_document(os.environ["TELEGRAM_BOT_TOKEN"], os.environ["TELEGRAM_CHAT_ID"],
+                                   attachment, "Price dashboard: open this file to see charts of every watch.")
             log("  sent to Telegram")
         except Exception as e:
             ok = False
@@ -437,7 +561,7 @@ def send(text: str, dry_run: bool) -> bool:
     if os.environ.get("EMAIL_TO") and os.environ.get("EMAIL_PASSWORD"):
         used = True
         try:
-            _email(text)
+            _email(text, attachment)
             log("  sent by email")
         except Exception as e:
             ok = False
@@ -452,6 +576,7 @@ def send(text: str, dry_run: bool) -> bool:
 # --------------------------------------------------------------------------
 
 HISTORY_FIELDS = ["checked_at", "watch_id", "price", "flights", "status"]
+EVENT_FIELDS = ["checked_at", "watch_id", "kind", "price", "reference"]
 
 
 def load_state(path: Path) -> dict:
@@ -467,18 +592,21 @@ def save_state(path: Path, state: dict) -> None:
     tmp.replace(path)
 
 
-def load_history(path: Path) -> list[dict]:
+def load_csv(path: Path) -> list[dict]:
     if not path.exists():
         return []
     with open(path, newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
 
 
-def append_history(path: Path, rows: list[dict]) -> None:
+load_history = load_csv
+
+
+def append_csv(path: Path, rows: list[dict], fields: list[str] = HISTORY_FIELDS) -> None:
     new = not path.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=HISTORY_FIELDS)
+        writer = csv.DictWriter(fh, fieldnames=fields)
         if new:
             writer.writeheader()
         writer.writerows(rows)
@@ -493,6 +621,8 @@ def log(msg: str) -> None:
 
 
 def run(args) -> int:
+    global _deadline
+    _deadline = time.monotonic() + RUN_BUDGET_SECONDS
     settings, watches = load_config(Path(args.config))
     if args.test_notify:
         ok = send("✈️ Test message from your flight tracker. Price alerts will arrive here.", False)
@@ -529,7 +659,7 @@ def run(args) -> int:
         n = len(results[key] or [])
         log(f"  {n} direct option(s)" if n else "  no answer from Google after retries")
 
-    messages, history_rows, exit_code = [], [], 0
+    messages, history_rows, event_rows, exit_code = [], [], [], 0
     wstate = state.setdefault("watches", {})
     if not any(results.values()):
         state["failed_runs"] = state.get("failed_runs", 0) + 1
@@ -544,7 +674,7 @@ def run(args) -> int:
     else:
         state["failed_runs"] = 0
 
-    first_run = False
+    first_run = not state.get("watches")  # nothing tracked before: send the full overview
     log("")
     for w in active:
         options = results.get(w.search_key)
@@ -562,8 +692,14 @@ def run(args) -> int:
         shown = f"{inr(option.price)}  {describe_flights(option.flights, option.times)}" if option else "NOT FOUND"
         log(f"{w.name}\n    {shown}")
         for kind, info in events:
+            event_rows.append({
+                "checked_at": now, "watch_id": w.id, "kind": kind,
+                "price": f"{st['last']:.0f}" if kind != "missing" else "",
+                "reference": f"{info['ref']:.0f}" if "ref" in info else ""})
             if kind == "baseline":
-                first_run = True
+                if not first_run:
+                    messages.append(f"👀 Now watching: {w.name}\n{inr(st['last'])} · "
+                                    f"{describe_flights(option.flights, option.times)}\n{google_link(w)}")
                 continue
             messages.append(event_message(kind, info, w, st, option))
 
@@ -577,25 +713,56 @@ def run(args) -> int:
             else f"✈️ Daily flight price summary ({stamp})"
         messages.append(summary_message(active, wstate, history, now_dt, title))
 
-    if messages and not send("\n\n".join(messages), args.dry_run):
-        exit_code = exit_code or 1
-    if not messages:
-        log("\nNo alerts this time.")
-
+    dashboard_path = None
     if args.dry_run:
         log("\n(dry run: nothing saved)")
     else:
         state["updated_at"] = now
         save_state(state_path, state)
-        if history_rows:
-            append_history(history_path, history_rows)
+        append_csv(history_path, history_rows)
+        append_csv(data_dir / "events.csv", event_rows, EVENT_FIELDS)
+        save_latest(data_dir / "latest.json", results, now)
+        dashboard_path = build_dashboard_safely(Path(args.config), data_dir, Path(args.dashboard))
+
+    attach = dashboard_path if (first_run or args.summary) and settings["send_dashboard"] else None
+    if messages and not send("\n\n".join(messages), args.dry_run, attach):
+        exit_code = exit_code or 1
+    if not messages:
+        log("\nNo alerts this time.")
     return exit_code
+
+
+def save_latest(path: Path, results: dict, now: str) -> None:
+    """Every direct option per search at its latest successful check."""
+    latest = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    searches = latest.get("searches", {})
+    for key, options in results.items():
+        if options is None:
+            continue  # keep the previous snapshot for searches Google did not answer
+        searches[search_id(key)] = {
+            "checked_at": now,
+            "options": [{"price": o.price, "flights": list(o.flights), "legs": list(o.legs)} for o in options],
+        }
+    save_state(path, {"updated_at": now, "searches": searches})
+
+
+def build_dashboard_safely(config: Path, data_dir: Path, out: Path) -> Path | None:
+    try:
+        import dashboard
+        dashboard.build(config, data_dir, out)
+        log(f"Dashboard written to {out}")
+        return out
+    except Exception as e:  # the dashboard must never stop alerts
+        log(f"Dashboard not built: {type(e).__name__}: {e}")
+        return None
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default=str(HERE / "watches.toml"), help="watch list (default: watches.toml)")
     parser.add_argument("--data-dir", default=str(HERE / "data"), help="where prices are saved (default: data/)")
+    parser.add_argument("--dashboard", default=str(HERE / "dashboard" / "index.html"),
+                        help="where to write the dashboard page (default: dashboard/index.html)")
     parser.add_argument("--summary", action="store_true", help="also send a summary of every watch")
     parser.add_argument("--dry-run", action="store_true", help="print only; send and save nothing")
     parser.add_argument("--test-notify", action="store_true", help="send a test message and exit")

@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Flight Prices</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f3f2ee; --hover: rgba(11,11,11,0.04);
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #75736e;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --good: #0ca30c; --good-text: #006300; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --critical-text: #b42525; --serious-text: #a2461e;
+  --accent: #2a78d6; --accent-text: #1c5cab; --accent-wash: rgba(42,120,214,0.10);
+  --shadow: 0 1px 2px rgba(11,11,11,0.05), 0 4px 16px rgba(11,11,11,0.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321; --hover: rgba(255,255,255,0.05);
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #9a988f;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --good-text: #0ca30c; --critical-text: #e66767; --serious-text: #ec835a;
+    --accent: #3987e5; --accent-text: #86b6ef; --accent-wash: rgba(57,135,229,0.16);
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321; --hover: rgba(255,255,255,0.05);
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #9a988f;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --good-text: #0ca30c; --critical-text: #e66767; --serious-text: #ec835a;
+  --accent: #3987e5; --accent-text: #86b6ef; --accent-wash: rgba(57,135,229,0.16);
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html:not(.js) .filters, html:not(.js) .top-actions, html:not(.js) .tiles { display: none; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font: inherit; color: inherit; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 20px 16px 48px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.ink2 { color: var(--ink-2); }
+.small { font-size: 13px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Top bar */
+.top { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.top h1 { margin: 0; font-size: 26px; letter-spacing: -0.01em; }
+.top .sub { margin: 2px 0 0; color: var(--ink-2); font-size: 14px; }
+.top-actions { display: flex; gap: 8px; align-items: center; }
+.icon-btn {
+  border: 1px solid var(--border); background: var(--surface); border-radius: 999px;
+  height: 34px; padding: 0 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.icon-btn:hover { background: var(--hover); }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px;
+  font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); white-space: nowrap;
+}
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.pill.good .dot { background: var(--good); } .pill.good { color: var(--good-text); }
+.pill.warning .dot { background: var(--warning); }
+.pill.serious .dot { background: var(--serious); } .pill.serious { color: var(--serious-text); }
+.pill.critical .dot { background: var(--critical); } .pill.critical { color: var(--critical-text); }
+.pill.neutral { color: var(--ink-2); font-weight: 500; }
+.pill.neutral .dot { background: var(--axis); }
+.banner {
+  margin: 16px 0 0; padding: 10px 14px; border-radius: 12px; background: var(--accent-wash);
+  color: var(--ink); font-size: 14px; border: 1px solid var(--border);
+}
+
+/* Filters */
+.filters {
+  position: sticky; top: 0; z-index: 5; margin: 16px -16px 0; padding: 10px 16px;
+  background: color-mix(in srgb, var(--page) 92%, transparent); backdrop-filter: blur(8px);
+  display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center;
+}
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg button {
+  border: 0; background: transparent; border-radius: 999px; padding: 5px 12px; cursor: pointer;
+  font-size: 14px; color: var(--ink-2); white-space: nowrap;
+}
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+.seg button:hover:not([aria-pressed="true"]) { background: var(--hover); }
+.fgroup { display: inline-flex; align-items: center; gap: 8px; }
+.filters .label { font-size: 13px; color: var(--muted); }
+@media (max-width: 520px) { .filters .label { display: none; } .seg button { padding: 5px 10px; } }
+
+/* Overview tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 16px; }
+.tile {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px;
+  box-shadow: var(--shadow); cursor: pointer; text-align: left; display: block; width: 100%;
+}
+.tile:hover { border-color: var(--axis); }
+.tile .t-name { font-weight: 600; }
+.tile .t-when { color: var(--muted); font-size: 13px; }
+.tile .t-price { font-size: 28px; font-weight: 650; margin-top: 8px; letter-spacing: -0.01em; }
+.tile .t-note { font-size: 13px; color: var(--ink-2); }
+
+/* Trip sections */
+.trip { margin-top: 32px; scroll-margin-top: 64px; }
+.trip-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.trip-head h2 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+.trip-head .when { color: var(--ink-2); }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: var(--shadow); padding: 16px; margin-top: 12px;
+}
+.card h3 { margin: 0; font-size: 16px; }
+.card .card-sub { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; }
+.hero .k { font-size: 13px; color: var(--muted); }
+.hero .v { font-size: 30px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.15; }
+.hero .v.sm { font-size: 22px; }
+.hero .d { font-size: 13px; color: var(--ink-2); }
+.delta-good { color: var(--good-text); }
+.delta-bad { color: var(--serious-text); }
+
+/* Charts */
+.chart-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 900px) { .chart-grid.two { grid-template-columns: 1fr 1fr; } }
+.chart-card { margin-top: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 2px; padding: 0; list-style: none; }
+.legend li { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.key { width: 14px; height: 0; border-top: 2px solid; border-radius: 2px; flex: none; }
+.chart { position: relative; margin-top: 6px; outline: none; touch-action: pan-y; }
+.chart:focus-visible { box-shadow: 0 0 0 2px var(--accent); border-radius: 8px; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .baseline { stroke: var(--axis); stroke-width: 1; }
+.chart .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .endlabel { fill: var(--ink); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart .target { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
+.chart .target-label { fill: var(--muted); font-size: 11px; }
+.chart .cross { stroke: var(--axis); stroke-width: 1; }
+.chart .empty { fill: var(--muted); font-size: 13px; }
+.tooltip {
+  position: absolute; pointer-events: none; z-index: 3; min-width: 150px; max-width: 260px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.16); font-size: 13px; display: none;
+}
+.tooltip .tt-time { color: var(--muted); margin-bottom: 4px; font-size: 12px; }
+.tooltip .tt-row { display: flex; align-items: center; gap: 8px; }
+.tooltip .tt-row + .tt-row { margin-top: 3px; }
+.tooltip .tt-val { font-weight: 650; font-variant-numeric: tabular-nums; min-width: 64px; }
+.tooltip .tt-lab { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Watch list */
+.watch-list { margin-top: 8px; }
+.wrow {
+  display: grid; grid-template-columns: 14px minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 4px 16px;
+  align-items: center; padding: 12px 0; border-top: 1px solid var(--grid);
+}
+.wrow:first-child { border-top: 0; }
+.wrow .w-name { font-weight: 600; }
+.wrow .w-flights { font-size: 13px; color: var(--ink-2); }
+.wrow .w-now { font-size: 20px; font-weight: 650; text-align: right; font-variant-numeric: tabular-nums; }
+.wrow .w-change { font-size: 13px; text-align: right; }
+.wrow .w-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.range-bar { position: relative; height: 6px; border-radius: 3px; background: var(--surface-2); margin: 8px 0 4px; }
+.range-bar .fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 3px; background: var(--accent-wash); }
+.range-bar .mark { position: absolute; top: -4px; width: 14px; height: 14px; border-radius: 50%; margin-left: -7px; border: 2px solid var(--surface); }
+.range-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) {
+  .wrow { grid-template-columns: 14px minmax(0, 1fr) auto; }
+  .wrow .w-range { grid-column: 2 / -1; }
+  .wrow .w-side { grid-column: 2 / -1; flex-direction: row; justify-content: space-between; align-items: center; }
+  .wrow .w-pricecol { grid-row: 1; grid-column: 3; }
+}
+
+/* Flight list (like Google Flights results) */
+.flist { margin-top: 8px; }
+.fopt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 12px 0; border-top: 1px solid var(--grid); align-items: center; }
+.fopt:first-child { border-top: 0; }
+.fopt .legs { display: grid; gap: 8px; }
+.leg { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: center; }
+.alogo {
+  width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-weight: 700;
+  font-size: 12px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border);
+}
+.leg .times { font-weight: 600; font-variant-numeric: tabular-nums; }
+.leg .times sup { font-weight: 500; color: var(--muted); font-size: 11px; }
+.leg .meta { font-size: 13px; color: var(--ink-2); }
+.fopt .price { text-align: right; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.badges { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-top: 4px; }
+.badge { font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); white-space: nowrap; }
+.badge.watch { background: var(--accent-wash); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+.badge.best { color: var(--good-text); font-weight: 600; }
+.search-block + .search-block { margin-top: 20px; }
+.search-title { font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+/* Timeline */
+.timeline { list-style: none; margin: 8px 0 0; padding: 0; }
+.timeline li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--grid); align-items: start; }
+.timeline li:first-child { border-top: 0; }
+.ticon { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 700; color: #fff; }
+.ticon.good { background: var(--good); } .ticon.serious { background: var(--serious); }
+.ticon.critical { background: var(--critical); } .ticon.warning { background: var(--warning); color: #0b0b0b; }
+.timeline .tl-text { font-size: 14px; }
+.timeline .tl-when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+details { margin-top: 12px; }
+details > summary { cursor: pointer; color: var(--accent-text); font-size: 14px; }
+.table-scroll { overflow-x: auto; margin-top: 8px; }
+table.data { border-collapse: collapse; font-size: 13px; width: 100%; }
+table.data th, table.data td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data th { color: var(--ink-2); font-weight: 600; }
+
+.empty-state { padding: 24px; text-align: center; color: var(--ink-2); }
+footer { margin-top: 40px; font-size: 13px; color: var(--muted); }
+footer p { margin: 4px 0; }
+@media (max-width: 520px) {
+  .top h1 { font-size: 22px; }
+  .hero .v { font-size: 26px; }
+  .card { padding: 14px 12px; border-radius: 14px; }
+}
+@media (forced-colors: active) {
+  .key, .chart path.series { forced-color-adjust: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Flight prices</h1>
+      <p class="sub" id="sub"></p>
+    </div>
+    <div class="top-actions">
+      <span id="health"></span>
+      <button class="icon-btn" id="theme" type="button" aria-label="Switch light or dark theme">◐ <span id="theme-label">Theme</span></button>
+    </div>
+  </header>
+  <div id="banner"></div>
+  <nav class="filters" aria-label="Filters">
+    <span class="fgroup"><span class="label">Range</span>
+    <span class="seg" id="range" role="group" aria-label="Time range"></span></span>
+    <span class="fgroup" id="tripgroup"><span class="label">Trip</span>
+    <span class="seg" id="tripfilter" role="group" aria-label="Trip"></span></span>
+  </nav>
+  <section class="tiles" id="tiles" aria-label="Trips at a glance"></section>
+  <!--__NOSCRIPT__-->
+  <main id="trips"></main>
+  <footer id="footer"></footer>
+</div>
+<script id="data" type="application/json">/*__DASHBOARD_DATA__*/null</script>
+<script>
+"use strict";
+document.documentElement.classList.add("js");
+const D = JSON.parse(document.getElementById("data").textContent) || {watches: [], trips: [], searches: {}, events: []};
+const TZ = "Asia/Kolkata";
+const HOUR = 3600e3, DAY = 24 * HOUR;
+const RANGES = [["1d", "24 h", DAY], ["7d", "7 days", 7 * DAY], ["30d", "30 days", 30 * DAY], ["all", "All", Infinity]];
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ft:" + k); return v == null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("ft:" + k, v); } catch (e) {} },
+};
+let rangeKey = store.get("range", "7d");
+if (!RANGES.some(r => r[0] === rangeKey)) rangeKey = "7d";
+let tripFilter = store.get("trip", "all");
+
+// ---------- formatting ----------
+const nf = new Intl.NumberFormat("en-IN", {maximumFractionDigits: 0});
+const inr = v => v == null ? "–" : "₹" + nf.format(Math.round(v));
+const inrShort = v => {
+  if (v >= 1e5) return "₹" + (v / 1e5).toFixed(v % 1e5 ? 1 : 0) + "L";
+  if (v >= 1e3) { const k = v / 1e3; return "₹" + (Number.isInteger(k) ? k : k.toFixed(1)) + "k"; }
+  return "₹" + Math.round(v);
+};
+const dtf = opts => new Intl.DateTimeFormat("en-IN", Object.assign({timeZone: TZ}, opts));
+const fDayTime = dtf({day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false});
+const fDay = dtf({day: "numeric", month: "short"});
+const fTime = dtf({hour: "2-digit", minute: "2-digit", hour12: false});
+const fWeekday = new Intl.DateTimeFormat("en-GB", {weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC"});
+const fWeekdayShort = new Intl.DateTimeFormat("en-GB", {weekday: "short", day: "numeric", month: "short", timeZone: "UTC"});
+const t = s => s ? Date.parse(s) : NaN;
+const dateOnly = s => { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+function ago(ms) {
+  const m = Math.round((Date.now() - ms) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + " min ago";
+  const h = Math.round(m / 60);
+  if (h < 36) return h + " h ago";
+  return Math.round(h / 24) + " days ago";
+}
+function daysTo(dateStr) {
+  const todayIST = dtf({year: "numeric", month: "2-digit", day: "2-digit"}).formatToParts(new Date())
+    .reduce((o, p) => (o[p.type] = p.value, o), {});
+  const today = Date.UTC(+todayIST.year, +todayIST.month - 1, +todayIST.day);
+  return Math.round((dateOnly(dateStr) - today) / DAY);
+}
+const dur = m => Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
+const tripDates = (a, b) => a === b ? fWeekday.format(dateOnly(a))
+  : fWeekdayShort.format(dateOnly(a)) + " → " + fWeekday.format(dateOnly(b));
+
+// ---------- tiny DOM helper (text always via textContent) ----------
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "style") el.style.cssText = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+const svgNS = "http://www.w3.org/2000/svg";
+function s(tag, attrs, text) {
+  const el = document.createElementNS(svgNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) if (v != null) el.setAttribute(k, v);
+  if (text != null) el.textContent = text;
+  return el;
+}
+
+// ---------- data model ----------
+const watches = D.watches.map(w => Object.assign({}, w, {
+  pts: (w.points || []).map(([ts, p]) => [t(ts), p]),
+  rt: !!w.return,
+}));
+const byId = Object.fromEntries(watches.map(w => [w.id, w]));
+const lastCheck = t(D.updated_at);
+function shortLabel(w) {
+  const route = w.from + (w.rt ? " ⇄ " : " → ") + w.to;
+  return route + " · " + (w.flights ? w.flights.join(" + ") : "cheapest direct");
+}
+function valueAt(w, x) {  // step lookup: the price in force at time x
+  let v;
+  for (const [ts, p] of w.pts) { if (ts <= x) v = p; else break; }
+  return v; // undefined = before first check, null = not found
+}
+function rangeBounds() {
+  const r = RANGES.find(r => r[0] === rangeKey);
+  const ends = watches.flatMap(w => w.pts.map(p => p[0]));
+  const x1 = Math.max(lastCheck || 0, ...ends);
+  const first = Math.min(...ends);
+  let x0 = r[2] === Infinity ? first : Math.max(first, x1 - r[2]);
+  if (x1 - x0 < 2 * HOUR) x0 = x1 - 2 * HOUR;  // first checks: still show the prices as dots
+  return [x0, x1];
+}
+function changeOver(w, x0) {
+  const now = w.state.last;
+  let start = valueAt(w, x0);
+  if (start == null) { const p = w.pts.find(p => p[0] >= x0 && p[1] != null); start = p && p[1]; }
+  if (now == null || start == null) return null;
+  return now - start;
+}
+function statusOf(w, x0) {
+  const st = w.state;
+  if (st.misses) return ["critical", "!", "Not found"];
+  if (st.last == null) return ["neutral", "", "Waiting for first check"];
+  if (w.target && st.last <= w.target) return ["good", "✓", "At or below target"];
+  const distinct = new Set(w.pts.map(p => p[1]).filter(p => p != null)).size;
+  if (distinct > 1 && st.last <= st.low) return ["good", "↓", "Lowest seen"];
+  const d24 = changeOver(w, (lastCheck || Date.now()) - DAY);
+  const rule = D.rules || {};
+  if (d24 != null && d24 > 0 && d24 >= Math.min(rule.rise_alert_rupees || 1000, st.last * (rule.rise_alert_percent || 10) / 100))
+    return ["serious", "↑", "Up " + inr(d24) + " in 24 h"];
+  return null;
+}
+function pill(kind, icon, text) {
+  return h("span", {class: "pill " + kind}, h("span", {class: "dot", "aria-hidden": "true"}), icon ? icon + " " : "", text);
+}
+
+// ---------- chart ----------
+const charts = [];
+function lineChart(series, opts) {
+  const root = h("div", {class: "chart", tabindex: "0", role: "img", "aria-label": opts.label});
+  const tip = h("div", {class: "tooltip", "aria-hidden": "true"});
+  root.append(tip);
+  const state = {series, opts, root, tip, idx: null};
+  charts.push(state);
+  const draw = () => renderChart(state);
+  new ResizeObserver(draw).observe(root);
+  root.addEventListener("pointermove", e => hover(state, e.clientX));
+  root.addEventListener("pointerdown", e => hover(state, e.clientX));
+  root.addEventListener("pointerleave", () => hideHover(state));
+  root.addEventListener("blur", () => hideHover(state));
+  root.addEventListener("keydown", e => {
+    const xs = state.xs || [];
+    if (!xs.length) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const i = state.idx == null ? xs.length - 1 : Math.max(0, Math.min(xs.length - 1, state.idx + (e.key === "ArrowLeft" ? -1 : 1)));
+      showHover(state, i);
+    } else if (e.key === "Escape") hideHover(state);
+  });
+  return root;
+}
+function niceTicks(lo, hi, n) {
+  const span = hi - lo || Math.max(1, hi * 0.1);
+  const raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(st => span / st <= n) || 10 * mag;
+  const start = Math.floor(lo / step) * step, out = [];
+  for (let v = start; v <= hi + step * 0.5; v += step) out.push(Math.round(v));
+  return out;
+}
+function renderChart(st) {
+  const {root, series, opts} = st;
+  const W = root.clientWidth;
+  if (!W) return;
+  st.svg && st.svg.remove();
+  const narrow = W < 480;
+  const H = narrow ? 200 : 240;
+  const m = {l: 48, r: 66, t: 14, b: 26};
+  const [x0, x1] = rangeBounds();
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const svg = s("svg", {viewBox: `0 0 ${W} ${H}`, height: H, "aria-hidden": "true"});
+  st.svg = svg;
+  root.prepend(svg);
+
+  // Visible values (including the value carried in from before x0)
+  const vals = [];
+  for (const se of series) {
+    const v0 = valueAt(se.w, x0); if (v0 != null) vals.push(v0);
+    for (const [ts, p] of se.w.pts) if (ts >= x0 && ts <= x1 && p != null) vals.push(p);
+  }
+  for (const tl of opts.targets || []) vals.push(tl.value);
+  const xsSet = new Set([x0, x1]);
+  for (const se of series) for (const [ts] of se.w.pts) if (ts >= x0 && ts <= x1) xsSet.add(ts);
+  const xs = [...xsSet].sort((a, b) => a - b);
+  st.xs = xs; st.x0 = x0; st.x1 = x1; st.m = m; st.W = W; st.H = H;
+  if (vals.length === 0 || !(x1 > x0)) {
+    svg.append(s("text", {x: W / 2, y: H / 2, "text-anchor": "middle", class: "empty"},
+      "Prices appear here after the first checks"));
+    st.xs = [];
+    return;
+  }
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = Math.max((hi - lo) * 0.12, hi * 0.02);
+  lo -= pad; hi += pad;
+  const ticks = niceTicks(lo, hi, narrow ? 3 : 4).filter(v => v >= lo && v <= hi);
+  const X = x => m.l + (x - x0) / (x1 - x0) * pw;
+  const Y = v => m.t + (1 - (v - lo) / (hi - lo)) * ph;
+  st.X = X; st.Y = Y;
+
+  for (const v of ticks) {
+    svg.append(s("line", {x1: m.l, x2: m.l + pw, y1: Y(v), y2: Y(v), class: "gridline"}));
+    svg.append(s("text", {x: m.l - 8, y: Y(v) + 4, "text-anchor": "end", class: "tick"}, inrShort(v)));
+  }
+  svg.append(s("line", {x1: m.l, x2: m.l + pw, y1: m.t + ph, y2: m.t + ph, class: "baseline"}));
+  // x ticks
+  const span = x1 - x0, nT = narrow ? 3 : 5;
+  const fmt = span <= 1.6 * DAY ? fTime : fDay;
+  let lastLabelX = -Infinity;
+  for (let i = 0; i <= nT; i++) {
+    const x = x0 + span * i / nT, px = X(x);
+    const label = fmt.format(new Date(x));
+    if (px - lastLabelX < 56) continue;
+    lastLabelX = px;
+    svg.append(s("text", {x: px, y: H - 6, "text-anchor": i === 0 ? "start" : i === nT ? "end" : "middle", class: "tick"}, label));
+  }
+  // targets
+  for (const tl of opts.targets || []) {
+    svg.append(s("line", {x1: m.l, x2: m.l + pw, y1: Y(tl.value), y2: Y(tl.value), class: "target"}));
+    svg.append(s("text", {x: m.l + 4, y: Y(tl.value) - 4, class: "target-label"}, "Target " + inr(tl.value)));
+  }
+  // series (step-after)
+  const ends = [];
+  for (const se of series) {
+    let d = "", pen = false, prevY = null;
+    const v0 = valueAt(se.w, x0);
+    const pts = [];
+    if (v0 !== undefined) pts.push([x0, v0]);
+    for (const [ts, p] of se.w.pts) if (ts > x0 && ts <= x1) pts.push([ts, p]);
+    for (let i = 0; i < pts.length; i++) {
+      const [ts, p] = pts[i];
+      const nextX = i + 1 < pts.length ? pts[i + 1][0] : Math.min(x1, lastCheck || x1);
+      if (p == null) { pen = false; prevY = null; continue; }
+      const px = X(ts), py = Y(p);
+      if (!pen) { d += `M${px},${py}`; pen = true; }
+      else d += `V${py}`;
+      d += `H${X(Math.max(ts, nextX))}`;
+      prevY = py;
+    }
+    if (d) svg.append(s("path", {d, fill: "none", stroke: se.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round", class: "series"}));
+    const last = pts.length ? pts[pts.length - 1] : null;
+    if (last && last[1] != null) {
+      const ex = X(Math.min(x1, Math.max(last[0], lastCheck || x1)));
+      ends.push({se, x: ex, y: Y(last[1]), v: last[1]});
+    }
+  }
+  // end dots + de-overlapped value labels
+  for (const e of ends) svg.append(s("circle", {cx: e.x, cy: e.y, r: 4, fill: e.se.color, stroke: "var(--surface)", "stroke-width": 2}));
+  const labs = ends.map(e => ({e, y: e.y})).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < labs.length; i++) if (labs[i].y - labs[i - 1].y < 14) labs[i].y = labs[i - 1].y + 14;
+  const overflow = labs.length ? labs[labs.length - 1].y - (m.t + ph) : 0;
+  if (overflow > 0) for (const l of labs) l.y -= overflow;
+  for (const l of labs) {
+    svg.append(s("line", {x1: m.l + pw + 8, x2: m.l + pw + 16, y1: l.y, y2: l.y, stroke: l.e.se.color, "stroke-width": 2, "stroke-linecap": "round"}));
+    svg.append(s("text", {x: m.l + pw + 20, y: l.y + 4, class: "endlabel"}, inrShort(l.e.v)));
+  }
+  st.cross = s("line", {y1: m.t, y2: m.t + ph, class: "cross", visibility: "hidden"});
+  svg.append(st.cross);
+  st.dots = series.map(se => { const c = s("circle", {r: 4.5, fill: se.color, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden"}); svg.append(c); return c; });
+  if (st.idx != null) showHover(st, Math.min(st.idx, xs.length - 1));
+}
+function hover(st, clientX) {
+  if (!st.xs || !st.xs.length) return;
+  const rect = st.root.getBoundingClientRect();
+  const x = st.x0 + (clientX - rect.left - st.m.l) / (st.W - st.m.l - st.m.r) * (st.x1 - st.x0);
+  let best = 0;
+  for (let i = 1; i < st.xs.length; i++) if (Math.abs(st.xs[i] - x) < Math.abs(st.xs[best] - x)) best = i;
+  showHover(st, best);
+}
+function showHover(st, i) {
+  st.idx = i;
+  const x = st.xs[i], px = st.X(x);
+  st.cross.setAttribute("x1", px); st.cross.setAttribute("x2", px); st.cross.setAttribute("visibility", "visible");
+  const tip = st.tip;
+  tip.replaceChildren(h("div", {class: "tt-time"}, fDayTime.format(new Date(x)) + " IST"));
+  const rows = st.series.map((se, k) => {
+    const v = valueAt(se.w, x);
+    const dot = st.dots[k];
+    if (v != null) { dot.setAttribute("cx", px); dot.setAttribute("cy", st.Y(v)); dot.setAttribute("visibility", "visible"); }
+    else dot.setAttribute("visibility", "hidden");
+    return {se, v};
+  }).sort((a, b) => (a.v ?? Infinity) - (b.v ?? Infinity));
+  for (const {se, v} of rows) {
+    tip.append(h("div", {class: "tt-row"},
+      h("span", {class: "key", style: `border-color:${se.color}`}),
+      h("span", {class: "tt-val"}, v === undefined ? "–" : v === null ? "not found" : inr(v)),
+      h("span", {class: "tt-lab"}, se.label)));
+  }
+  tip.style.display = "block";
+  const tw = tip.offsetWidth, W = st.root.clientWidth;
+  let left = px + 12;
+  if (left + tw > W) left = px - tw - 12;
+  tip.style.left = Math.max(0, left) + "px";
+  tip.style.top = "4px";
+}
+function hideHover(st) {
+  st.idx = null;
+  if (st.cross) st.cross.setAttribute("visibility", "hidden");
+  (st.dots || []).forEach(d => d.setAttribute("visibility", "hidden"));
+  st.tip.style.display = "none";
+}
+
+// ---------- sections ----------
+const COLORS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)"];
+function seriesFor(ws) { return ws.map((w, i) => ({w, color: COLORS[i % COLORS.length], label: shortLabel(w)})); }
+
+function chartCard(title, sub, ws) {
+  const series = seriesFor(ws);
+  for (const se of series) se.w._color = se.color;
+  const targets = ws.filter(w => w.target).map(w => ({value: w.target}));
+  const legend = h("ul", {class: "legend"}, series.map(se => h("li", null,
+    h("span", {class: "key", style: `border-color:${se.color}`}), se.label)));
+  const card = h("div", {class: "card chart-card"},
+    h("h3", null, title), h("p", {class: "card-sub"}, sub),
+    series.length > 1 ? legend : null,
+    lineChart(series, {targets, label: title + ": price over time. Values are listed in the table below."}));
+  card.append(priceTable(series));
+  return card;
+}
+
+function priceTable(series) {
+  const [x0, x1] = rangeBounds();
+  const xs = [...new Set(series.flatMap(se => se.w.pts.map(p => p[0]).filter(ts => ts >= x0 && ts <= x1)))].sort((a, b) => b - a).slice(0, 200);
+  const table = h("table", {class: "data"},
+    h("thead", null, h("tr", null, h("th", {scope: "col"}, "Price changed (IST)"), series.map(se => h("th", {scope: "col"}, se.label)))),
+    h("tbody", null, xs.map(x => h("tr", null, h("td", null, fDayTime.format(new Date(x))),
+      series.map(se => { const v = valueAt(se.w, x); return h("td", null, v === undefined ? "–" : v === null ? "not found" : inr(v)); })))));
+  return h("details", null, h("summary", null, "Show as a table"), h("div", {class: "table-scroll"}, table));
+}
+
+function watchRow(w, x0) {
+  const st = w.state, color = w._color || "var(--axis)";
+  const status = statusOf(w, x0);
+  const ch = changeOver(w, x0);
+  const rangeName = RANGES.find(r => r[0] === rangeKey)[1];
+  const chEl = ch == null ? h("span", {class: "muted"}, "–")
+    : Math.abs(ch) < 1 ? h("span", {class: "muted"}, "No change in " + rangeName)
+    : h("span", {class: ch < 0 ? "delta-good" : "delta-bad"}, (ch < 0 ? "↓ " : "↑ ") + inr(Math.abs(ch)) + " in " + rangeName);
+  let rangeEl = null;
+  if (st.low != null && st.high != null) {
+    const pct = st.high > st.low ? (st.last - st.low) / (st.high - st.low) * 100 : 0;
+    rangeEl = h("div", {class: "w-range"},
+      h("div", {class: "range-bar", role: "img", "aria-label": `Now ${inr(st.last)}, between lowest ${inr(st.low)} and highest ${inr(st.high)} seen`},
+        h("div", {class: "fill", style: `width:${pct}%`}),
+        h("div", {class: "mark", style: `left:${pct}%;background:${color}`})),
+      h("div", {class: "range-labels"}, h("span", null, "Low " + inr(st.low)), h("span", null, "High " + inr(st.high))));
+  }
+  // Exact-flight watches already name their flights; cheapest ones say which flights are cheapest now.
+  const flightsText = !w.flights && st.last_flights && st.last_flights.length ? "Now: " + st.last_flights.join(" + ") : "";
+  const legsInfo = legDetails(w);
+  return h("div", {class: "wrow"},
+    h("span", {class: "key", style: `border-color:${color}`, "aria-hidden": "true"}),
+    h("div", null, h("div", {class: "w-name"}, w.name),
+      h("div", {class: "w-flights"}, [flightsText, legsInfo].filter(Boolean).join(" · ")),
+      w.target ? h("div", {class: "w-flights"}, "Target " + inr(w.target)) : null),
+    h("div", {class: "w-pricecol"}, h("div", {class: "w-now"}, inr(st.last)), h("div", {class: "w-change"}, chEl)),
+    rangeEl || h("div", {class: "w-range muted small"}, "No range yet"),
+    h("div", {class: "w-side"}, status ? pill(...status) : h("span"),
+      h("a", {href: w.link, target: "_blank", rel: "noopener noreferrer", class: "small"}, "Google Flights ↗")));
+}
+function legDetails(w) {
+  const se = D.searches[w.search];
+  const fl = w.state.last_flights;
+  if (!se || !fl || !fl.length) return "";
+  const opt = se.options.find(o => o.flights.join() === fl.join());
+  if (!opt || !opt.legs || !opt.legs.length) return "";
+  return opt.legs.map(l => l.dep.slice(11, 16) + "–" + l.arr.slice(11, 16)).join(", ");
+}
+
+function flightList(searchId, ws) {
+  const se = D.searches[searchId];
+  const [from, to, dep, ret] = searchId.split("|");
+  const title = from + (ret ? " ⇄ " : " → ") + to + " · " + (ret ? tripDates(dep, ret) : fWeekday.format(dateOnly(dep)));
+  const block = h("div", {class: "search-block"},
+    h("div", {class: "search-title"}, h("span", null, title),
+      se ? h("span", {class: "muted small"}, se.options.length + " direct option" + (se.options.length === 1 ? "" : "s") + " · checked " + ago(t(se.checked_at))) : null));
+  if (!se || !se.options.length) { block.append(h("div", {class: "muted small"}, "No flight list yet.")); return block; }
+  const watched = new Set(ws.filter(w => w.flights).map(w => w.flights.join()));
+  const minP = Math.min(...se.options.map(o => o.price));
+  const list = h("div", {class: "flist"});
+  for (const o of se.options) {
+    const legs = (o.legs && o.legs.length ? o.legs : o.flights.map(f => ({flight: f}))).map(l => {
+      const code = l.flight.split(" ")[0];
+      const nextDay = l.dep && l.arr && l.arr.slice(0, 10) > l.dep.slice(0, 10);
+      return h("div", {class: "leg"},
+        h("div", {class: "alogo", "aria-hidden": "true"}, code),
+        h("div", null,
+          l.dep ? h("div", {class: "times"}, l.dep.slice(11, 16) + " – " + l.arr.slice(11, 16), nextDay ? h("sup", null, " +1") : null) : null,
+          h("div", {class: "meta"}, [l.airline || (D.airlines || {})[code] || code, l.flight,
+            l.from ? l.from + "–" + l.to : null, l.minutes ? dur(l.minutes) : null, "Direct"].filter(Boolean).join(" · "))));
+    });
+    list.append(h("div", {class: "fopt"},
+      h("div", {class: "legs"}, legs),
+      h("div", null, h("div", {class: "price"}, inr(o.price)),
+        h("div", {class: "badges"},
+          o.price === minP ? h("span", {class: "badge best"}, "Cheapest") : null,
+          watched.has(o.flights.join()) ? h("span", {class: "badge watch"}, "Watching") : null))));
+  }
+  block.append(list);
+  return block;
+}
+
+const EVENT_STYLE = {drop: ["good", "↓", "Price drop"], rise: ["serious", "↑", "Rising fast"],
+  target: ["good", "✓", "Target reached"], missing: ["critical", "!", "Not found"], back: ["good", "✓", "Back on sale"]};
+function timeline(ws, x0) {
+  const ids = new Set(ws.map(w => w.id));
+  const evs = (D.events || []).filter(e => ids.has(e.watch_id) && t(e.checked_at) >= x0).reverse().slice(0, 12);
+  if (!evs.length) return h("p", {class: "muted small"}, "No alerts in this range. Alerts are sent for drops of " +
+    inr(D.rules.drop_alert_rupees) + " or " + D.rules.drop_alert_percent + "% (whichever is larger), targets, fast rises and missing flights.");
+  return h("ul", {class: "timeline"}, evs.map(e => {
+    const w = byId[e.watch_id];
+    const [kind, icon, label] = EVENT_STYLE[e.kind] || ["warning", "•", e.kind];
+    let detail = "";
+    if (e.price) detail = inr(+e.price) + (e.reference ? " (from " + inr(+e.reference) + ")" : "");
+    return h("li", null, h("span", {class: "ticon " + kind, "aria-hidden": "true"}, icon),
+      h("div", {class: "tl-text"}, h("strong", null, label), " · " + shortLabel(w) + (detail ? " · " + detail : "")),
+      h("span", {class: "tl-when"}, fDayTime.format(new Date(t(e.checked_at)))));
+  }));
+}
+
+function oneWayCombo(w) {
+  // Two one-way tickets for the same round trip, if both one-way searches exist.
+  const out = D.searches[[w.from, w.to, w.depart, ""].join("|")];
+  const back = D.searches[[w.to, w.from, w.return, ""].join("|")];
+  if (!out || !back || !out.options.length || !back.options.length) return null;
+  const a = out.options.reduce((x, y) => y.price < x.price ? y : x);
+  const b = back.options.reduce((x, y) => y.price < x.price ? y : x);
+  return {price: a.price + b.price, flights: [a.flights[0], b.flights[0]]};
+}
+
+function tripSection(trip, x0) {
+  const ws = trip.watches.map(id => byId[id]).filter(Boolean);
+  const rts = ws.filter(w => w.rt), ows = ws.filter(w => !w.rt);
+  const days = daysTo(trip.start);
+  const sec = h("section", {class: "trip", id: "trip-" + slug(trip.name)},
+    h("div", {class: "trip-head"}, h("h2", null, trip.name),
+      h("span", {class: "when"}, tripDates(trip.start, trip.end)),
+      h("span", {class: "muted"}, days > 1 ? days + " days to go" : days === 1 ? "Tomorrow" : days === 0 ? "Today" : "Departed")));
+
+  // Hero: best now
+  const priced = (rts.length ? rts : ows).filter(w => w.state.last != null);
+  const best = priced.reduce((a, b) => (!a || b.state.last < a.state.last) ? b : a, null);
+  const hero = h("div", {class: "card hero"});
+  if (best) {
+    const ch = changeOver(best, x0);
+    hero.append(h("div", null, h("div", {class: "k"}, rts.length ? "Best direct round trip now" : "Best direct price now"),
+      h("div", {class: "v num"}, inr(best.state.last)),
+      h("div", {class: "d"}, (best.state.last_flights || []).join(" + ") + " · " + best.from + (best.rt ? " ⇄ " : " → ") + best.to),
+      ch != null && Math.abs(ch) >= 1 ? h("div", {class: "d " + (ch < 0 ? "delta-good" : "delta-bad")},
+        (ch < 0 ? "↓ " : "↑ ") + inr(Math.abs(ch)) + " in " + RANGES.find(r => r[0] === rangeKey)[1]) : null));
+    const lowW = priced.reduce((a, b) => (!a || b.state.low < a.state.low) ? b : a, null);
+    hero.append(h("div", null, h("div", {class: "k"}, "Lowest seen"),
+      h("div", {class: "v sm num"}, inr(lowW.state.low)),
+      h("div", {class: "d"}, shortLabel(lowW) + (lowW.state.low_at ? " · " + fDayTime.format(new Date(t(lowW.state.low_at))) : ""))));
+    const combo = best.rt ? oneWayCombo(best) : null;
+    if (combo) {
+      const diff = combo.price - best.state.last;
+      hero.append(h("div", null, h("div", {class: "k"}, "Two one-way tickets instead"),
+        h("div", {class: "v sm num"}, inr(combo.price)),
+        h("div", {class: "d"}, combo.flights.join(" + ") + " · " + (Math.abs(diff) < 1 ? "same price" :
+          diff < 0 ? inr(-diff) + " cheaper" : inr(diff) + " more"))));
+    }
+  } else {
+    hero.append(h("div", {class: "empty-state"}, "No prices yet. They appear after the first check."));
+  }
+  sec.append(hero);
+
+  // Charts
+  const grid = h("div", {class: "chart-grid" + (rts.length && ows.length ? " two" : "")});
+  if (rts.length) grid.append(chartCard("Round trips", "Total price, 1 adult, economy, direct only", rts));
+  if (ows.length) grid.append(chartCard("One way", "Per ticket, 1 adult, economy, direct only", ows));
+  sec.append(grid);
+
+  // Watches
+  sec.append(h("div", {class: "card"}, h("h3", null, "Your watches"),
+    h("p", {class: "card-sub"}, "Now, change in range, and where today's price sits between the lowest and highest seen"),
+    h("div", {class: "watch-list"}, ws.map(w => watchRow(w, x0)))));
+
+  // Flight lists
+  const searchIds = [...new Set(ws.map(w => w.search))];
+  sec.append(h("div", {class: "card"}, h("h3", null, "All direct flights right now"),
+    h("p", {class: "card-sub"}, "Every direct option at the latest check, cheapest first"),
+    searchIds.map(id => flightList(id, ws))));
+
+  // Alerts
+  sec.append(h("div", {class: "card"}, h("h3", null, "Alerts"), timeline(ws, x0)));
+  return sec;
+}
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+function tiles(trips, x0) {
+  return trips.map(trip => {
+    const ws = trip.watches.map(id => byId[id]).filter(Boolean);
+    const pool = ws.filter(w => w.rt && w.state.last != null);
+    const use = pool.length ? pool : ws.filter(w => w.state.last != null);
+    const best = use.reduce((a, b) => (!a || b.state.last < a.state.last) ? b : a, null);
+    const days = daysTo(trip.start);
+    let note = "No prices yet";
+    if (best) {
+      const ch = changeOver(best, x0);
+      note = (pool.length ? "best round trip" : "best one way") +
+        (ch != null && Math.abs(ch) >= 1 ? " · " + (ch < 0 ? "↓ " : "↑ ") + inr(Math.abs(ch)) : "");
+    }
+    const alerts = (D.events || []).filter(e => ws.some(w => w.id === e.watch_id) && t(e.checked_at) >= x0).length;
+    return h("button", {class: "tile", type: "button", onclick: () => {
+        const el = document.getElementById("trip-" + slug(trip.name)); el && el.scrollIntoView({behavior: "smooth"}); }},
+      h("div", {class: "t-name"}, trip.name),
+      h("div", {class: "t-when"}, tripDates(trip.start, trip.end) + " · " + (days >= 0 ? days + " days to go" : "departed")),
+      h("div", {class: "t-price num"}, best ? inr(best.state.last) : "–"),
+      h("div", {class: "t-note"}, note + " · " + alerts + " alert" + (alerts === 1 ? "" : "s") + " in range"));
+  });
+}
+
+function header() {
+  const n = watches.length;
+  document.getElementById("sub").textContent = n
+    ? `${n} watch${n === 1 ? "" : "es"} · direct flights only · checked every ${D.check_every_hours || 2} h`
+    : "No watches yet";
+  const health = document.getElementById("health");
+  let p;
+  if (!lastCheck) p = pill("neutral", "", "No checks yet");
+  else if (D.failed_runs > 0) p = pill("warning", "!", `Google not answering · ${D.failed_runs} check${D.failed_runs === 1 ? "" : "s"}`);
+  else if (Date.now() - lastCheck > (D.check_every_hours || 2) * 2.5 * HOUR) p = pill("serious", "!", "Last check " + ago(lastCheck));
+  else p = pill("good", "✓", "Checked " + ago(lastCheck));
+  if (lastCheck) p.title = "Last check " + fDayTime.format(new Date(lastCheck)) + " IST";
+  health.replaceChildren(p);
+  const banner = document.getElementById("banner");
+  banner.replaceChildren();
+  if (D.demo) banner.append(h("div", {class: "banner"},
+    "Demo data: the history on this page is made up to preview the design. Your real page fills in from the tracker's checks."));
+}
+
+function filters() {
+  const range = document.getElementById("range");
+  range.replaceChildren(...RANGES.map(([k, label]) => h("button", {type: "button", "aria-pressed": String(k === rangeKey),
+    onclick: () => { rangeKey = k; store.set("range", k); render(); }}, label)));
+  const tf = document.getElementById("tripfilter");
+  const opts = [["all", "All"]].concat(D.trips.map(tr => [tr.name, tr.name.split(",")[0]]));
+  if (!opts.some(o => o[0] === tripFilter)) tripFilter = "all";
+  tf.replaceChildren(...opts.map(([k, label]) => h("button", {type: "button", "aria-pressed": String(k === tripFilter),
+    onclick: () => { tripFilter = k; store.set("trip", k); render(); }}, label)));
+  document.getElementById("tripgroup").hidden = D.trips.length < 2;
+}
+
+function footer() {
+  const f = document.getElementById("footer");
+  f.replaceChildren(
+    h("p", null, "Prices come from Google Flights (through the open-source fli library) and are the same prices Google shows. Always confirm on the airline's own site before booking."),
+    h("p", null, "Times are IST; flight times are local airport times. Page built " +
+      (D.generated_at ? fDayTime.format(new Date(t(D.generated_at))) + " IST" : "") + "."));
+}
+
+function render() {
+  charts.length = 0;
+  header(); filters();
+  const [x0] = watches.length ? rangeBounds() : [0];
+  const shown = D.trips.filter(tr => tripFilter === "all" || tr.name === tripFilter);
+  document.getElementById("tiles").replaceChildren(...tiles(D.trips, x0));
+  const main = document.getElementById("trips");
+  main.replaceChildren(...(shown.length ? shown.map(tr => tripSection(tr, x0))
+    : [h("div", {class: "card empty-state"}, "No watches yet. Add some to watches.toml.")]));
+  footer();
+}
+
+// ---------- theme ----------
+(function theme() {
+  const btn = document.getElementById("theme"), label = document.getElementById("theme-label");
+  const apply = th => {
+    if (th) document.documentElement.setAttribute("data-theme", th);
+    else document.documentElement.removeAttribute("data-theme");
+    const dark = th ? th === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    label.textContent = dark ? "Light" : "Dark";
+  };
+  apply(store.get("theme", ""));
+  btn.addEventListener("click", () => {
+    const cur = document.documentElement.getAttribute("data-theme") ||
+      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const next = cur === "dark" ? "light" : "dark";
+    store.set("theme", next); apply(next);
+  });
+})();
+
+render();
+setInterval(header, 60000);
+</script>
+</body>
+</html>

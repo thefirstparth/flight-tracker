@@ -123,17 +123,17 @@ class Retrying(unittest.TestCase):
         answers = iter([[], [Picking.opts[0]], [Picking.opts[1]]])
         calls = []
 
-        def fake(key, settings):
+        def fake(key, settings, needed):
             calls.append(1)
             return next(answers)
-        got = t.fetch_options(("BLR", "SIN", "d", "r"), S, {("6E 1457", "6E 1458")},
+        got = t.fetch_options(("BLR", "SIN", "d", None), S, {("6E 1457", "6E 1458")},
                               search=fake, sleep=lambda s: None)
         self.assertEqual(len(calls), 3)
         self.assertEqual([o.price for o in got], [26576, 28230])
 
     def test_gives_up_with_none(self):
         got = t.fetch_options(("BLR", "SIN", "d", "r"), S, set(),
-                              search=lambda k, s: [], sleep=lambda s: None)
+                              search=lambda k, s, n: [], sleep=lambda s: None)
         self.assertIsNone(got)
 
 
