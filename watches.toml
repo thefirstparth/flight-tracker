@@ -1,0 +1,120 @@
+# Flights to watch. Edit this file to add, change or remove watches.
+#
+# Every watch is DIRECT FLIGHTS ONLY (set in [settings]).
+#
+# Fields for each [[watch]]:
+#   name     - any label; it appears in the alerts
+#   from, to - airport codes (BLR, DEL, BOM, SIN, HKT, ...)
+#   depart   - departure date, YYYY-MM-DD
+#   return   - return date for a round trip; leave it out for one way
+#   flights  - the exact flights to watch, e.g. ["6E 1457", "6E 1458"]
+#              (outbound first, then return). Leave it out to watch the
+#              CHEAPEST direct option on those dates, whichever airline.
+#   target   - optional: alert when the price falls to or below this (INR)
+#
+# A watch stops being checked once its departure date has passed.
+
+[settings]
+currency = "INR"
+adults = 1
+direct_only = true
+
+# Alert when the price falls by at least this much since your last alert
+# (the larger of the two numbers wins, so tiny wobbles stay quiet).
+drop_alert_rupees = 500
+drop_alert_percent = 3
+
+# Also warn when a price climbs fast (a "book soon" signal).
+rise_alerts = true
+rise_alert_rupees = 1000
+rise_alert_percent = 10
+
+# Warn if an exact flight is missing this many checks in a row
+# (sold out, schedule change, or Google not answering).
+missing_checks_alert = 3
+
+
+# ---------- Singapore, 2-7 March 2027 ----------
+
+[[watch]]
+name = "Bengaluru - Singapore, IndiGo 6E 1457 / 6E 1458"
+from = "BLR"
+to = "SIN"
+depart = "2027-03-02"
+return = "2027-03-07"
+flights = ["6E 1457", "6E 1458"]
+# target = 26000
+
+[[watch]]
+name = "New Delhi - Singapore, IndiGo 6E 1203 / 6E 1204"
+from = "DEL"
+to = "SIN"
+depart = "2027-03-02"
+return = "2027-03-07"
+flights = ["6E 1203", "6E 1204"]
+
+[[watch]]
+name = "Bengaluru - Singapore, cheapest direct round trip"
+from = "BLR"
+to = "SIN"
+depart = "2027-03-02"
+return = "2027-03-07"
+
+[[watch]]
+name = "New Delhi - Singapore, cheapest direct round trip"
+from = "DEL"
+to = "SIN"
+depart = "2027-03-02"
+return = "2027-03-07"
+
+
+# ---------- Phuket, 22-26 January 2027 ----------
+
+[[watch]]
+name = "Bengaluru - Phuket, IndiGo 6E 1217 / 6E 1218"
+from = "BLR"
+to = "HKT"
+depart = "2027-01-22"
+return = "2027-01-26"
+flights = ["6E 1217", "6E 1218"]
+
+[[watch]]
+name = "Bengaluru - Phuket, Akasa QP 623 / QP 624"
+from = "BLR"
+to = "HKT"
+depart = "2027-01-22"
+return = "2027-01-26"
+flights = ["QP 623", "QP 624"]
+
+[[watch]]
+name = "Bengaluru - Phuket, cheapest direct round trip"
+from = "BLR"
+to = "HKT"
+depart = "2027-01-22"
+return = "2027-01-26"
+
+[[watch]]
+name = "Bengaluru to Phuket one way, Akasa QP 623"
+from = "BLR"
+to = "HKT"
+depart = "2027-01-22"
+flights = ["QP 623"]
+
+[[watch]]
+name = "Bengaluru to Phuket one way, cheapest direct"
+from = "BLR"
+to = "HKT"
+depart = "2027-01-22"
+
+[[watch]]
+name = "Phuket to Bengaluru one way, Akasa QP 624"
+from = "HKT"
+to = "BLR"
+depart = "2027-01-26"
+flights = ["QP 624"]
+
+[[watch]]
+name = "Phuket to Bengaluru one way, cheapest direct"
+from = "HKT"
+to = "BLR"
+depart = "2027-01-26"

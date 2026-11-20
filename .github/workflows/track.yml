@@ -1,0 +1,71 @@
+# Runs the flight tracker on GitHub's free servers.
+# This file only works when it sits at the TOP of a repository
+# (.github/workflows/track.yml), so it stays switched off while the tracker
+# lives in a sub-folder. See README.md, "Set it up in its own repository".
+
+name: Track flight prices
+
+on:
+  schedule:
+    - cron: "23 */2 * * *"   # every 2 hours (GitHub may start it a few minutes late)
+    - cron: "53 2 * * *"     # daily summary at 08:23 IST
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "What to do"
+        type: choice
+        options: [check, summary, test-notify]
+        default: check
+
+permissions:
+  contents: write   # to save price history back to the repository
+
+concurrency:
+  group: flight-tracker
+  cancel-in-progress: false
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Check prices
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+        run: |
+          MODE="${{ inputs.mode }}"
+          if [ "${{ github.event.schedule }}" = "53 2 * * *" ]; then MODE=summary; fi
+          case "$MODE" in
+            summary)     python tracker.py --summary ;;
+            test-notify) python tracker.py --test-notify ;;
+            *)           python tracker.py ;;
+          esac
+
+      - name: Save price history
+        if: always()
+        run: |
+          git config user.name "flight-tracker-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then echo "Nothing to save."; exit 0; fi
+          git commit -m "Price check $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do
+            git pull --rebase --autostash && git push && exit 0
+            sleep 5
+          done
+          exit 1
