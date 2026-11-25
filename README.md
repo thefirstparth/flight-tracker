@@ -1,23 +1,60 @@
 # Flight price tracker (direct flights only)
 
-Checks the direct flights in `watches.toml` every 2 hours and messages you on
-Telegram (or email) when a price drops, reaches your target, climbs fast, or a
-watched flight disappears. Every price is saved to `data/history.csv`, a
-dashboard page is rebuilt after each check, and a summary with the dashboard
-attached arrives each morning at about 08:23 IST.
+A small web app for two people sharing one password. Every ~30 minutes it
+checks the direct flights in `watches.toml` (exact flights, the cheapest
+direct option, or the cheapest day in a date window), shows them on a
+dashboard with charts, and sends Telegram alerts when a price drops, reaches
+your target, climbs fast, or a watched flight disappears. A summary arrives
+each morning at about 08:23 IST.
 
 Prices come from Google Flights through the open-source
 [`flights`](https://github.com/punitarani/fli) library, so they are the same
-prices Google shows. They are not more accurate. The difference is that you
-decide how often prices are checked and what counts as worth an alert.
-Always confirm on the airline's own website before booking.
+prices Google shows; the difference is how often they are checked and what
+you are told. Always confirm on the airline's site before booking.
+
+Everything runs on free plans with no card: **Vercel** (app and checks),
+**Upstash Redis** (stored prices) and **Upstash QStash** (the 10-minute
+schedule), both added from inside Vercel, plus **Telegram**.
+
+## Put it live on Vercel (about 15 minutes, once)
+
+1. **Vercel account** (Hobby, free): sign up at vercel.com.
+2. **Import the code**: *Add New → Project → Import Git Repository*, pick the
+   repository holding this folder. Set **Root Directory** to `flight-tracker`
+   (skip if the folder's contents are at the top of their own repository) and
+   Framework Preset **Other**. If the code is not on the repository's main
+   branch, set *Settings → Git → Production Branch* to the branch that has it.
+3. **Storage**: in the project, *Storage → Create Database → Upstash →
+   Redis*, Free plan, connect it to the project. This adds the connection
+   settings automatically.
+4. **Schedule**: *Integrations → Marketplace → Upstash → QStash*, Free plan,
+   connect it to the project. (Alternative without QStash: a free cron-job.org
+   job calling `https://<your-app>/api/cron` every 10 minutes, method POST,
+   with header `Authorization: Bearer <CRON_SECRET>`.)
+5. **Settings → Environment Variables** (Production):
+   - `DASHBOARD_PASSWORD`: the password you and your wife will use
+   - `CRON_SECRET`: a long random text (only the scheduler uses it)
+   - `TELEGRAM_BOT_TOKEN`: from @BotFather (`/newbot`)
+   - `TELEGRAM_CHAT_ID`: message your bot once, then open
+     `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `"chat":{"id": …}`
+6. **Redeploy** (*Deployments → ⋯ → Redeploy*) so the settings take effect.
+7. Open `https://<your-app>.vercel.app`, log in, open **Setup**:
+   every line should be ✓. Press **Create / update the 10-minute schedule**
+   and **Send a test Telegram message**. Then **Check now** on the dashboard.
+
+`/health` shows whether storage is connected and how many watches loaded,
+without any prices. Vercel's own daily cron (in `vercel.json`) sends the
+morning summary.
+
+**Adding or changing flights:** edit `watches.toml` (or ask Claude to) and
+push; Vercel redeploys by itself. A web form for this can come later.
 
 ## How it differs from Google Flights tracking
 
 | | Google Flights tracking | This tracker |
 |---|---|---|
 | Prices | Google's | Same (Google's) |
-| How often checked | Not published | Every 2 hours |
+| How often checked | Not published | About every 30 minutes |
 | When you're told | "Significant" changes, by email | Drop of ₹500 or 3% (whichever is larger) since the last alert, target reached, fast rise, flight gone |
 | Where | Email | Telegram and/or email |
 | Cheapest direct option across airlines | Per date, one way | Also for round trips |
@@ -56,40 +93,14 @@ it in a browser).
 
 Rebuild it by hand with `python dashboard.py` (or `python dashboard.py --demo`).
 
-## Set it up in its own repository (about 15 minutes)
+## Other ways to run it
 
-1. **Create a new repository** on the GitHub account that should run it (yours
-   or a friend's). Make it **private**, otherwise your travel dates are public.
-2. **Copy everything in this folder to the top level of that repository**,
-   including the hidden `.github` folder:
-   ```bash
-   git clone https://github.com/<account>/<new-repo>.git
-   cp -r flight-tracker/. <new-repo>/
-   cd <new-repo> && git add -A && git commit -m "Flight tracker" && git push
-   ```
-   (In this folder the schedule is switched off. It only runs when
-   `.github/workflows/track.yml` sits at the top of a repository.)
-3. **Create a Telegram bot** (free):
-   - In Telegram, open **@BotFather**, send `/newbot`, pick a name. It gives you
-     a **token** like `123456:ABC-DEF...`.
-   - Open your new bot and send it any message (e.g. "hi").
-   - In a browser open `https://api.telegram.org/bot<TOKEN>/getUpdates` and find
-     `"chat":{"id":123456789` — that number is your **chat id**.
-4. **Add the secrets**: in the repository, *Settings → Secrets and variables →
-   Actions → New repository secret*:
-   - `TELEGRAM_BOT_TOKEN` = the token
-   - `TELEGRAM_CHAT_ID` = the chat id
-   - Optional email instead of (or as well as) Telegram: `EMAIL_TO` (your
-     address) and `EMAIL_PASSWORD` (a Gmail **app password**, from
-     Google Account → Security → 2-Step Verification → App passwords).
-     For a non-Gmail account also set `SMTP_HOST`/`SMTP_PORT` in the workflow.
-5. **Test it**: *Actions* tab → enable workflows if asked → **Track flight
-   prices** → *Run workflow* → mode `test-notify`. You should get a test
-   message. Then run it once with mode `check`: you get a "Flight tracker
-   started" message with every current price.
-
-From then on it runs by itself every 2 hours. Each run commits the new prices
-and the rebuilt dashboard to the repository.
+- **Your own computer:** see "Run it on your own computer" below; prices are
+  saved in `data/` and the dashboard is written to `dashboard/index.html`.
+- **GitHub Actions:** `.github/workflows/track.yml` runs the command-line
+  version every 2 hours when this folder is the top of a repository. GitHub's
+  terms say Actions on GitHub's servers should only be used for work related
+  to the repository's software, so this is a fallback, not the recommendation.
 
 ## Changing what is watched
 
@@ -99,18 +110,21 @@ cheapest direct option (leave `flights` out). Add `target = 26000` to be told
 when a price reaches that number. Alert thresholds are in `[settings]`.
 Watches stop by themselves after their departure date.
 
-## Cost (free)
+## Cost (free) and free-plan usage
 
-- A run normally takes 1–3 billed minutes, about 13 runs a day: roughly
-  **400–1,200 of the 2,000 free minutes a month** on a private repository
-  (20–60%). On days when Google answers badly a run can take longer; the
-  tracker stops retrying after 8 minutes. Public repositories have unlimited
-  minutes but expose your plans. To use fewer minutes, check every 3 hours
-  (change `*/2` to `*/3` in the workflow).
-- Checking every hour instead would double that (40–80%), close to the 80%
-  line, so 2 hours is the default. Change it in `.github/workflows/track.yml`.
-- Price history grows by about 1 MB a year; the dashboard page stays well
-  under 1 MB. Telegram and Gmail are free.
+Estimates for the shipped watch list, checked every 10 minutes (each watch
+refreshed about every 30). All stay well under 80% of the free limits:
+
+| Free limit | Used | Share |
+|---|---|---|
+| QStash: 1,000 calls a day | 144 | 14% |
+| Vercel Hobby: 1 million function calls a month | ~4,500 | under 1% |
+| Vercel Hobby: 4 CPU-hours a month | ≤ 1 hour (0.8 s CPU per call measured, most of it start-up) | ≤ 25% |
+| Upstash Redis: 500,000 commands a month | ~90,000 (10–20 per check, plus page views) | ~18% |
+| Upstash Redis: 256 MB | well under 1 MB a year (only price changes are stored) | < 1% |
+
+Each call stops starting new searches after 45 seconds, inside Vercel's 60 s
+limit; whatever did not fit is checked on the next call. Telegram is free.
 
 ## Run it on your own computer instead
 
@@ -129,18 +143,19 @@ Scheduler (Windows) if you want it to run automatically.
 
 - **Same data as Google.** Fares only on airline sites or with app/bank coupons
   are not seen.
-- **Unofficial access.** The library imitates the Google Flights website. Google
-  answers about one request in three with an error (and with "too many
-  requests" when asked a lot), so each request is retried up to 5 times. A
-  check where Google did not answer is not counted as a flight going missing. If Google changes its format the tracker stops getting prices.
-  After 3 empty checks in a row it messages you and the run shows as failed;
-  updating the version in `requirements.txt` usually fixes it. Automated access
-  is a grey area under Google's terms; with the shipped watch list a check
-  makes about 15 requests (round trips: one for the outbound list, then one per
-  watched outbound flight and the 2 cheapest), plus retries.
-- **Gaps between checks.** A fare that appears and disappears within 2 hours
+- **Unofficial access.** The library imitates the Google Flights website.
+  Google answers about half of all requests with a short error, at random, so
+  each request is retried quickly (up to 6 tries). A check where Google did not
+  answer, or that ran out of time, is not counted as a flight going missing.
+  If Google changes its format the tracker stops getting prices; after 3 empty
+  checks in a row it messages you, and updating the version in
+  `requirements.txt` usually fixes it. Automated access is a grey area under
+  Google's terms; a full check makes about 15 requests plus retries.
+- **Flexible dates** use Google's date grid: the cheapest direct price per day,
+  without the flight numbers.
+- **Gaps between checks.** A fare that appears and disappears within 30 minutes
   can be missed.
 - **Round trips** are priced as Google prices them. The "cheapest direct round
   trip" can combine two airlines (e.g. IndiGo out, Air India Express back),
   which usually means two separate tickets.
-- **GitHub schedules** can start a few minutes late at busy times.
+- **Schedules** (QStash, GitHub) can start a few minutes late at busy times.
