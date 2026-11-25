@@ -13,6 +13,12 @@
 #   target   - optional: alert when the price falls to or below this (INR)
 #   trip     - optional: groups watches together on the dashboard
 #
+# Flexible dates (like Google's date grid): give a window instead of one date.
+#   depart       = first possible departure day
+#   depart_until = last possible departure day
+#   trip_days    = trip length for a round trip (leave out for one way)
+# The watch then tracks the cheapest direct price on any day in the window.
+#
 # A watch stops being checked once its departure date has passed.
 
 [settings]
@@ -33,6 +39,10 @@ rise_alert_percent = 10
 # Warn if an exact flight is missing this many checks in a row
 # (sold out, schedule change, or Google not answering).
 missing_checks_alert = 3
+
+# Each watch is refreshed about this often (the scheduler runs every 10 min
+# and checks whatever is due).
+check_every_minutes = 30
 
 
 # ---------- Singapore, 2-7 March 2027 ----------
@@ -130,3 +140,23 @@ trip = "Phuket, 22-26 January 2027"
 from = "HKT"
 to = "BLR"
 depart = "2027-01-26"
+
+
+# ---------- Flexible dates (examples near your trips; delete if not wanted) ----------
+
+[[watch]]
+name = "Bengaluru to Phuket, cheapest day 15-31 January"
+trip = "Flexible dates"
+from = "BLR"
+to = "HKT"
+depart = "2027-01-15"
+depart_until = "2027-01-31"
+
+[[watch]]
+name = "Bengaluru - Singapore, cheapest 5-day trip starting 25 Feb - 10 Mar"
+trip = "Flexible dates"
+from = "BLR"
+to = "SIN"
+depart = "2027-02-25"
+depart_until = "2027-03-10"
+trip_days = 5

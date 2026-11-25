@@ -61,7 +61,9 @@ button { font: inherit; color: inherit; }
 .top { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
 .top h1 { margin: 0; font-size: 26px; letter-spacing: -0.01em; }
 .top .sub { margin: 2px 0 0; color: var(--ink-2); font-size: 14px; }
-.top-actions { display: flex; gap: 8px; align-items: center; }
+.top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#webactions:empty { display: none; }
+@media (max-width: 520px) { .icon-btn { height: 32px; padding: 0 10px; font-size: 14px; } }
 .icon-btn {
   border: 1px solid var(--border); background: var(--surface); border-radius: 999px;
   height: 34px; padding: 0 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
@@ -213,6 +215,15 @@ button { font: inherit; color: inherit; }
 .ticon.critical { background: var(--critical); } .ticon.warning { background: var(--warning); color: #0b0b0b; }
 .timeline .tl-text { font-size: 14px; }
 .timeline .tl-when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.icon-btn.primary { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; }
+.icon-btn.primary:hover { filter: brightness(1.08); background: var(--accent); }
+.datestrip { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 10px; overflow-x: auto; padding-bottom: 2px; }
+.dbar { flex: 1 0 22px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+.dbar .bar { width: 100%; border-radius: 4px 4px 0 0; background: var(--s1); opacity: 0.55; min-height: 3px; }
+.dbar.best .bar { opacity: 1; background: var(--good); }
+.dbar .dlabel { font-size: 10px; color: var(--muted); margin-top: 3px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dbar:hover .bar, .dbar:focus .bar { opacity: 1; }
+.datebest { font-size: 14px; margin-top: 6px; }
 
 details { margin-top: 12px; }
 details > summary { cursor: pointer; color: var(--accent-text); font-size: 14px; }
@@ -244,6 +255,7 @@ footer p { margin: 4px 0; }
     </div>
     <div class="top-actions">
       <span id="health"></span>
+      <span id="webactions" class="top-actions"></span>
       <button class="icon-btn" id="theme" type="button" aria-label="Switch light or dark theme">◐ <span id="theme-label">Theme</span></button>
     </div>
   </header>
@@ -336,13 +348,23 @@ function s(tag, attrs, text) {
 // ---------- data model ----------
 const watches = D.watches.map(w => Object.assign({}, w, {
   pts: (w.points || []).map(([ts, p]) => [t(ts), p]),
-  rt: !!w.return,
+  rt: !!(w.return || w.trip_days),
+  flex: !!w.depart_until,
 }));
 const byId = Object.fromEntries(watches.map(w => [w.id, w]));
 const lastCheck = t(D.updated_at);
 function shortLabel(w) {
   const route = w.from + (w.rt ? " ⇄ " : " → ") + w.to;
+  if (w.flex) return route + " · cheapest " + (w.trip_days ? w.trip_days + "-day trip" : "day") +
+    ", " + fDayShort(w.depart) + "–" + fDayShort(w.depart_until);
   return route + " · " + (w.flights ? w.flights.join(" + ") : "cheapest direct");
+}
+function fDayShort(d) { return new Intl.DateTimeFormat("en-GB", {day: "numeric", month: "short", timeZone: "UTC"}).format(dateOnly(d)); }
+const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s);
+function flightsText(fl) {
+  if (!fl || !fl.length) return "";
+  if (fl.every(isDate)) return fl.map(d => fWeekdayShort.format(dateOnly(d))).join(" → ");
+  return fl.join(" + ");
 }
 function valueAt(w, x) {  // step lookup: the price in force at time x
   let v;
@@ -602,12 +624,13 @@ function watchRow(w, x0) {
       h("div", {class: "range-labels"}, h("span", null, "Low " + inr(st.low)), h("span", null, "High " + inr(st.high))));
   }
   // Exact-flight watches already name their flights; cheapest ones say which flights are cheapest now.
-  const flightsText = !w.flights && st.last_flights && st.last_flights.length ? "Now: " + st.last_flights.join(" + ") : "";
+  const flightsNow = !w.flights && st.last_flights && st.last_flights.length
+    ? (w.flex ? "Cheapest: " : "Now: ") + flightsText(st.last_flights) : "";
   const legsInfo = legDetails(w);
   return h("div", {class: "wrow"},
     h("span", {class: "key", style: `border-color:${color}`, "aria-hidden": "true"}),
     h("div", null, h("div", {class: "w-name"}, w.name),
-      h("div", {class: "w-flights"}, [flightsText, legsInfo].filter(Boolean).join(" · ")),
+      h("div", {class: "w-flights"}, [flightsNow, legsInfo].filter(Boolean).join(" · ")),
       w.target ? h("div", {class: "w-flights"}, "Target " + inr(w.target)) : null),
     h("div", {class: "w-pricecol"}, h("div", {class: "w-now"}, inr(st.last)), h("div", {class: "w-change"}, chEl)),
     rangeEl || h("div", {class: "w-range muted small"}, "No range yet"),
@@ -623,7 +646,35 @@ function legDetails(w) {
   return opt.legs.map(l => l.dep.slice(11, 16) + "–" + l.arr.slice(11, 16)).join(", ");
 }
 
+function dateStrip(searchId, ws) {
+  const se = D.searches[searchId];
+  const [from, to, win, days] = searchId.split("|");
+  const [a, b] = win.split("..");
+  const title = from + (days ? " ⇄ " : " → ") + to + " · " + (days ? parseInt(days) + "-day trips starting " : "departing ") +
+    fDayShort(a) + "–" + fDayShort(b);
+  const block = h("div", {class: "search-block"},
+    h("div", {class: "search-title"}, h("span", null, title),
+      se ? h("span", {class: "muted small"}, se.options.length + " date" + (se.options.length === 1 ? "" : "s") + " · checked " + ago(t(se.checked_at))) : null));
+  if (!se || !se.options.length) { block.append(h("div", {class: "muted small"}, "No prices yet.")); return block; }
+  const opts = [...se.options].sort((x, y) => x.flights[0] < y.flights[0] ? -1 : 1);
+  const prices = opts.map(o => o.price), lo = Math.min(...prices), hi = Math.max(...prices);
+  const strip = h("div", {class: "datestrip", role: "list", "aria-label": "Cheapest direct price per departure date"});
+  for (const o of opts) {
+    const pct = hi > lo ? 25 + 75 * (o.price - lo) / (hi - lo) : 60;
+    const label = flightsText(o.flights);
+    strip.append(h("div", {class: "dbar" + (o.price === lo ? " best" : ""), role: "listitem", tabindex: "0",
+        title: label + ": " + inr(o.price), "aria-label": label + ": " + inr(o.price)},
+      h("div", {class: "bar", style: `height:${pct}%`}),
+      h("div", {class: "dlabel"}, fDayShort(o.flights[0]).replace(" ", "\u00a0"))));
+  }
+  const best = opts.filter(o => o.price === lo).map(o => flightsText(o.flights));
+  block.append(strip, h("div", {class: "datebest"}, h("strong", null, "Cheapest " + inr(lo)), " · " + best.slice(0, 3).join(", ") +
+    (best.length > 3 ? " and " + (best.length - 3) + " more" : "") + " · most expensive " + inr(hi)));
+  return block;
+}
+
 function flightList(searchId, ws) {
+  if (searchId.includes("..")) return dateStrip(searchId, ws);
   const se = D.searches[searchId];
   const [from, to, dep, ret] = searchId.split("|");
   const title = from + (ret ? " ⇄ " : " → ") + to + " · " + (ret ? tripDates(dep, ret) : fWeekday.format(dateOnly(dep)));
@@ -701,7 +752,7 @@ function tripSection(trip, x0) {
     const ch = changeOver(best, x0);
     hero.append(h("div", null, h("div", {class: "k"}, rts.length ? "Best direct round trip now" : "Best direct price now"),
       h("div", {class: "v num"}, inr(best.state.last)),
-      h("div", {class: "d"}, (best.state.last_flights || []).join(" + ") + " · " + best.from + (best.rt ? " ⇄ " : " → ") + best.to),
+      h("div", {class: "d"}, flightsText(best.state.last_flights) + " · " + best.from + (best.rt ? " ⇄ " : " → ") + best.to),
       ch != null && Math.abs(ch) >= 1 ? h("div", {class: "d " + (ch < 0 ? "delta-good" : "delta-bad")},
         (ch < 0 ? "↓ " : "↑ ") + inr(Math.abs(ch)) + " in " + RANGES.find(r => r[0] === rangeKey)[1]) : null));
     const lowW = priced.reduce((a, b) => (!a || b.state.low < a.state.low) ? b : a, null);
@@ -770,18 +821,28 @@ function tiles(trips, x0) {
 function header() {
   const n = watches.length;
   document.getElementById("sub").textContent = n
-    ? `${n} watch${n === 1 ? "" : "es"} · direct flights only · checked every ${D.check_every_hours || 2} h`
+    ? `${n} watch${n === 1 ? "" : "es"} · direct flights only · checked about every ${D.check_every_minutes || 30} min`
     : "No watches yet";
   const health = document.getElementById("health");
   let p;
   if (!lastCheck) p = pill("neutral", "", "No checks yet");
   else if (D.failed_runs > 0) p = pill("warning", "!", `Google not answering · ${D.failed_runs} check${D.failed_runs === 1 ? "" : "s"}`);
-  else if (Date.now() - lastCheck > (D.check_every_hours || 2) * 2.5 * HOUR) p = pill("serious", "!", "Last check " + ago(lastCheck));
+  else if (Date.now() - lastCheck > Math.max(3 * (D.check_every_minutes || 30), 90) * 60000) p = pill("serious", "!", "Last check " + ago(lastCheck));
   else p = pill("good", "✓", "Checked " + ago(lastCheck));
   if (lastCheck) p.title = "Last check " + fDayTime.format(new Date(lastCheck)) + " IST";
   health.replaceChildren(p);
+  const wa = document.getElementById("webactions");
+  wa.replaceChildren();
+  if (D.web) {
+    const btn = h("button", {class: "icon-btn primary", type: "submit", title: "Check every watch now (takes up to a minute)"}, "↻ Check now");
+    wa.append(h("form", {method: "post", action: D.web.check_now, style: "margin:0",
+        onsubmit: () => { btn.disabled = true; btn.textContent = "Checking… (up to a minute)"; }}, btn),
+      h("a", {class: "icon-btn", href: D.web.setup}, "Setup"),
+      h("a", {class: "icon-btn", href: D.web.logout}, "Log out"));
+  }
   const banner = document.getElementById("banner");
   banner.replaceChildren();
+  if (D.web && D.web.notice) banner.append(h("div", {class: "banner"}, D.web.notice));
   if (D.demo) banner.append(h("div", {class: "banner"},
     "Demo data: the history on this page is made up to preview the design. Your real page fills in from the tracker's checks."));
 }
@@ -837,7 +898,7 @@ function render() {
 })();
 
 render();
-setInterval(header, 60000);
+setInterval(() => { if (!document.querySelector('#webactions button[disabled]')) header(); }, 60000);
 </script>
 </body>
 </html>

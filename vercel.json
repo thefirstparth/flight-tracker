@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "includeFiles": "{app.py,tracker.py,dashboard.py,store.py,dashboard_template.html,watches.toml}"
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index?path=/$1" }],
+  "crons": [{ "path": "/api/cron/summary", "schedule": "53 2 * * *" }]
+}

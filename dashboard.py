@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import tracker
+from store import FileStore
 
 HERE = Path(__file__).resolve().parent
 TEMPLATE = HERE / "dashboard_template.html"
@@ -42,13 +43,15 @@ def _compress(rows: list[dict]) -> list[list]:
     return points
 
 
-def collect(config: Path, data_dir: Path) -> dict:
+def collect(config: Path, store) -> dict:
+    """Everything the page shows, from a FileStore/RedisStore (or a data folder)."""
+    if isinstance(store, (str, Path)):
+        store = FileStore(Path(store))
     settings, watches = tracker.load_config(config)
-    state = tracker.load_state(data_dir / "state.json")
-    history = tracker.load_csv(data_dir / "history.csv")
-    events = tracker.load_csv(data_dir / "events.csv")
-    latest_path = data_dir / "latest.json"
-    latest = json.loads(latest_path.read_text(encoding="utf-8")) if latest_path.exists() else {}
+    state = store.load_state()
+    history = store.load_history()
+    events = store.load_events()
+    latest = store.load_latest()
 
     by_watch: dict[str, list[dict]] = {}
     for row in history:
@@ -61,16 +64,17 @@ def collect(config: Path, data_dir: Path) -> dict:
         out_watches.append({
             "id": w.id, "name": w.name, "trip": w.trip,
             "from": w.origin, "to": w.destination, "depart": w.depart, "return": w.ret,
+            "depart_until": w.depart_until, "trip_days": w.trip_days,
             "flights": list(w.flights) if w.flights else None, "target": w.target,
             "search": w.search_id, "link": tracker.google_link(w),
             "state": {k: st.get(k) for k in ("last", "last_flights", "low", "low_at", "high",
                                               "first", "first_at", "misses", "last_seen_at")},
             "points": _compress(sorted(by_watch.get(w.id, []), key=lambda r: r["checked_at"])),
         })
-        t = trips.setdefault(w.trip, {"name": w.trip, "start": w.depart, "end": w.ret or w.depart,
-                                      "watches": []})
+        end = w.ret or w.depart_until or w.depart
+        t = trips.setdefault(w.trip, {"name": w.trip, "start": w.depart, "end": end, "watches": []})
         t["start"] = min(t["start"], w.depart)
-        t["end"] = max(t["end"], w.ret or w.depart)
+        t["end"] = max(t["end"], end)
         t["watches"].append(w.id)
 
     known = {w.id for w in watches}
@@ -78,7 +82,7 @@ def collect(config: Path, data_dir: Path) -> dict:
         "generated_at": datetime.now(tracker.IST).replace(microsecond=0).isoformat(),
         "updated_at": state.get("updated_at"),
         "failed_runs": state.get("failed_runs", 0),
-        "check_every_hours": 2,
+        "check_every_minutes": settings["check_every_minutes"],
         "rules": {k: settings[k] for k in ("drop_alert_rupees", "drop_alert_percent",
                                            "rise_alert_rupees", "rise_alert_percent", "direct_only")},
         "trips": sorted(trips.values(), key=lambda t: t["start"]),
@@ -129,8 +133,8 @@ def render(data: dict) -> str:
     return html.replace(DATA_MARKER, payload)
 
 
-def build(config: Path, data_dir: Path, out: Path, demo: bool = False) -> Path:
-    data = demo_data(config) if demo else collect(config, data_dir)
+def build(config: Path, store, out: Path, demo: bool = False) -> Path:
+    data = demo_data(config) if demo else collect(config, store)
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp")
     tmp.write_text(render(data), encoding="utf-8")
@@ -217,6 +221,19 @@ def demo_data(config: Path) -> dict:
         for i in range(n):  # route-wide trend, backwards: a bit dearer a month ago
             shared.append(x)
             x = 0.985 * x + rng.gauss(0.0012, 0.004)
+        if w.flexible:  # one option per departure date (and return date)
+            options = {}
+            day, end = datetime.fromisoformat(w.depart), datetime.fromisoformat(w.depart_until)
+            base = 26576 if w.trip_days else 13340
+            while day <= end:
+                dates = (day.date().isoformat(),)
+                if w.trip_days:
+                    dates += ((day + timedelta(days=w.trip_days)).date().isoformat(),)
+                weekend = day.weekday() >= 4
+                options[dates] = round(base * rng.uniform(1.0, 1.35) * (1.08 if weekend else 1.0) / 10) * 10
+                day += timedelta(days=1)
+            paths[w.search_id] = {fl: _walk(rng, n, price, shared) for fl, price in options.items()}
+            continue
         options = {o[0]: o[1] for o in DEMO_EXTRA_OPTIONS.get((w.origin, w.destination, bool(w.ret)), [])}
         for other in watches:
             if other.search_id == w.search_id and other.flights:
@@ -252,18 +269,19 @@ def demo_data(config: Path) -> dict:
     for w in watches:
         if w.search_id not in searches:
             searches[w.search_id] = {"checked_at": now.isoformat(), "options": sorted(
-                ({"price": float(p[-1]), "flights": list(fl), "legs": _demo_legs(fl, w)}
+                ({"price": float(p[-1]), "flights": list(fl), "legs": [] if w.flexible else _demo_legs(fl, w)}
                  for fl, p in paths[w.search_id].items() if p[-1] is not None),
                 key=lambda o: o["price"])}
     events.sort(key=lambda e: e["checked_at"])
 
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
-        tracker.save_state(d / "state.json", {"watches": state, "failed_runs": 0, "updated_at": now.isoformat()})
-        tracker.append_csv(d / "history.csv", history)
-        tracker.append_csv(d / "events.csv", events, tracker.EVENT_FIELDS)
-        tracker.save_state(d / "latest.json", {"updated_at": now.isoformat(), "searches": searches})
-        data = collect(config, d)
+        fs = FileStore(Path(tmp))
+        fs.save_state({"watches": state, "failed_runs": 0, "updated_at": now.isoformat()})
+        fs.add_history(history)
+        fs.add_events(events)
+        fs.save_latest({"updated_at": now.isoformat(), "searches": searches})
+        data = collect(config, fs)
     data["demo"] = True
     return data
 
@@ -277,7 +295,7 @@ def main(argv=None) -> int:
     parser.add_argument("--demo", action="store_true", help="use made-up history (for previewing)")
     args = parser.parse_args(argv)
     out = Path(args.out) if args.out else HERE / "dashboard" / ("demo.html" if args.demo else "index.html")
-    build(Path(args.config), Path(args.data_dir), out, demo=args.demo)
+    build(Path(args.config), FileStore(Path(args.data_dir)), out, demo=args.demo)
     print(f"Wrote {out}")
     return 0
 
