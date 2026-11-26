@@ -155,6 +155,18 @@ class CheckLoop(unittest.TestCase):
         self.assertEqual(sum("Flight tracker started" in t for t in texts), 1)
         self.assertFalse(any("Now watching" in t for t in texts))
 
+    def test_one_failing_route_is_not_google_down(self):
+        tracker.check(CONFIG, self.store)  # every route answers
+        state = self.store.load_state()
+        sid = "DEL|SIN|2027-03-02|2027-03-07"
+        state["searches"][sid]["ok"] = False  # only this route is due, and keeps failing
+        self.store.save_state(state)
+        with mock.patch.object(tracker, "fetch_options", return_value=None):
+            for _ in range(4):
+                tracker.check(CONFIG, self.store)
+        self.assertEqual(self.store.load_state()["failed_runs"], 0)
+        self.assertFalse(any("no prices from Google" in c[0][0] for c in self.send.call_args_list))
+
     def test_budget_cut_does_not_count_as_missing(self):
         budget = {"used_up": False}
 

@@ -805,7 +805,10 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
 
     messages, history_rows, event_rows = [], [], []
     wstate = state.setdefault("watches", {})
-    if results and not any(results.values()):
+    # "Google not answering" only when every route's latest attempt failed,
+    # not when one stubborn route happens to be the only one due this run.
+    all_failing = bool(searches) and not any(info.get("ok") for info in searches.values())
+    if results and all_failing:
         state["failed_runs"] = state.get("failed_runs", 0) + 1
         log(f"No prices at all this check ({state['failed_runs']} in a row).")
         if state["failed_runs"] == BROKEN_RUNS_ALERT:
