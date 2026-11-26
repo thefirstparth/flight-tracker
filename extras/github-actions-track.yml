@@ -1,7 +1,8 @@
-# Runs the flight tracker on GitHub's free servers.
-# This file only works when it sits at the TOP of a repository
-# (.github/workflows/track.yml), so it stays switched off while the tracker
-# lives in a sub-folder. See README.md, "Set it up in its own repository".
+# OPTIONAL FALLBACK, switched off: runs the command-line tracker on GitHub's
+# servers every 2 hours. It only runs if you copy it to
+# .github/workflows/track.yml at the top of the repository. Do not use it
+# together with the Vercel app (you would get every alert twice), and note
+# GitHub's terms on using Actions for work unrelated to the repository's code.
 
 name: Track flight prices
 

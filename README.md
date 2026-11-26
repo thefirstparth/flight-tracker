@@ -97,8 +97,9 @@ Rebuild it by hand with `python dashboard.py` (or `python dashboard.py --demo`).
 
 - **Your own computer:** see "Run it on your own computer" below; prices are
   saved in `data/` and the dashboard is written to `dashboard/index.html`.
-- **GitHub Actions:** `.github/workflows/track.yml` runs the command-line
-  version every 2 hours when this folder is the top of a repository. GitHub's
+- **GitHub Actions (switched off):** `extras/github-actions-track.yml` runs the
+  command-line version every 2 hours if copied to `.github/workflows/`. Never
+  together with the Vercel app (alerts would arrive twice). GitHub's
   terms say Actions on GitHub's servers should only be used for work related
   to the repository's software, so this is a fallback, not the recommendation.
 
