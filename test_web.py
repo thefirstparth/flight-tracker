@@ -109,7 +109,8 @@ def fake_options(key, settings, needed, **_):
     if ".." in depart:
         return [tracker.Option(20000, ("2027-01-17",), ("Sun 17 Jan",)),
                 tracker.Option(21000, ("2027-01-18",), ("Mon 18 Jan",))]
-    opts = [tracker.Option(30000 + i, f, ("t",) * len(f)) for i, f in enumerate(sorted(needed))]
+    concrete = [tuple("ZZ 9" if x == tracker.ANY else x for x in f) for f in sorted(needed)]
+    opts = [tracker.Option(30000 + i, f, ("t",) * len(f)) for i, f in enumerate(concrete)]
     cheap = ("ZZ 1", "ZZ 2") if ret else ("ZZ 1",)
     return opts + [tracker.Option(10000, cheap, ("t",) * len(cheap))]
 
@@ -169,9 +170,20 @@ class CheckLoop(unittest.TestCase):
         self.assertFalse(state["searches"]["BLR|SIN|2027-03-02|2027-03-07"]["ok"])  # retried next run
 
     def test_flexible_watch_takes_cheapest_date(self):
-        tracker.check(CONFIG, self.store)
-        st = self.store.load_state()["watches"]["bengaluru-to-phuket-cheapest-day-15-31-january"]
+        with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as fh:
+            fh.write('[[watch]]\nname="flex"\nfrom="BLR"\nto="HKT"\ndepart="2027-01-15"\ndepart_until="2027-01-31"\n')
+        tracker.check(Path(fh.name), self.store)
+        st = self.store.load_state()["watches"]["flex"]
         self.assertEqual((st["last"], st["last_flights"]), (20000, ["2027-01-17"]))
+
+    def test_any_return_takes_cheapest_matching_pair(self):
+        _, watches = tracker.load_config(CONFIG)
+        w = next(x for x in watches if x.flights and tracker.ANY in x.flights)
+        opts = [tracker.Option(36661, ("QP 623", "IX 931"), ()), tracker.Option(39089, ("6E 1217", "IX 931"), ()),
+                tracker.Option(42850, ("6E 1217", "6E 1218"), ())]
+        self.assertEqual(tracker.pick(w, opts).flights, ("6E 1217", "IX 931"))  # Akasa out is not allowed
+        self.assertTrue(tracker.all_found({w.flights}, [o.flights for o in opts]))
+        self.assertFalse(tracker.all_found({w.flights}, [("QP 623", "IX 931")]))
 
     def test_due_after_interval(self):
         now = datetime(2027, 1, 1, 12, 0, tzinfo=tracker.IST)

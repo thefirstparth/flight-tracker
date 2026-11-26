@@ -8,8 +8,10 @@
 #   depart   - departure date, YYYY-MM-DD
 #   return   - return date for a round trip; leave it out for one way
 #   flights  - the exact flights to watch, e.g. ["6E 1457", "6E 1458"]
-#              (outbound first, then return). Leave it out to watch the
-#              CHEAPEST direct option on those dates, whichever airline.
+#              (outbound first, then return). Use "any" for a direction
+#              where any direct flight will do, e.g. ["6E 1217", "any"].
+#              Leave it out to watch the CHEAPEST direct option both ways.
+#   who      - optional label on the dashboard, e.g. "Parents"
 #   target   - optional: alert when the price falls to or below this (INR)
 #   trip     - optional: groups watches together on the dashboard
 #
@@ -45,118 +47,39 @@ missing_checks_alert = 3
 check_every_minutes = 30
 
 
-# ---------- Singapore, 2-7 March 2027 ----------
+# ---------- Singapore, Tue 2 - Sun 7 March 2027 ----------
 
 [[watch]]
 name = "Bengaluru - Singapore, IndiGo 6E 1457 / 6E 1458"
-trip = "Singapore, 2-7 March 2027"
+who = "You"
+trip = "Singapore"
 from = "BLR"
 to = "SIN"
 depart = "2027-03-02"
 return = "2027-03-07"
 flights = ["6E 1457", "6E 1458"]
-# target = 26000
 
 [[watch]]
-name = "New Delhi - Singapore, IndiGo 6E 1203 / 6E 1204"
-trip = "Singapore, 2-7 March 2027"
+name = "Delhi - Singapore, IndiGo 6E 1203 / 6E 1204"
+who = "Parents"
+trip = "Singapore"
 from = "DEL"
 to = "SIN"
 depart = "2027-03-02"
 return = "2027-03-07"
 flights = ["6E 1203", "6E 1204"]
 
-[[watch]]
-name = "Bengaluru - Singapore, cheapest direct round trip"
-trip = "Singapore, 2-7 March 2027"
-from = "BLR"
-to = "SIN"
-depart = "2027-03-02"
-return = "2027-03-07"
+
+# ---------- Phuket, Fri 22 - Tue 26 January 2027 ----------
+# Out on IndiGo 6E 1217 (06:20); back on whichever direct flight makes the
+# round trip cheapest ("any").
 
 [[watch]]
-name = "New Delhi - Singapore, cheapest direct round trip"
-trip = "Singapore, 2-7 March 2027"
-from = "DEL"
-to = "SIN"
-depart = "2027-03-02"
-return = "2027-03-07"
-
-
-# ---------- Phuket, 22-26 January 2027 ----------
-
-[[watch]]
-name = "Bengaluru - Phuket, IndiGo 6E 1217 / 6E 1218"
-trip = "Phuket, 22-26 January 2027"
+name = "Bengaluru - Phuket, IndiGo 6E 1217 out, cheapest direct return"
+who = "You"
+trip = "Phuket"
 from = "BLR"
 to = "HKT"
 depart = "2027-01-22"
 return = "2027-01-26"
-flights = ["6E 1217", "6E 1218"]
-
-[[watch]]
-name = "Bengaluru - Phuket, Akasa QP 623 / QP 624"
-trip = "Phuket, 22-26 January 2027"
-from = "BLR"
-to = "HKT"
-depart = "2027-01-22"
-return = "2027-01-26"
-flights = ["QP 623", "QP 624"]
-
-[[watch]]
-name = "Bengaluru - Phuket, cheapest direct round trip"
-trip = "Phuket, 22-26 January 2027"
-from = "BLR"
-to = "HKT"
-depart = "2027-01-22"
-return = "2027-01-26"
-
-[[watch]]
-name = "Bengaluru to Phuket one way, Akasa QP 623"
-trip = "Phuket, 22-26 January 2027"
-from = "BLR"
-to = "HKT"
-depart = "2027-01-22"
-flights = ["QP 623"]
-
-[[watch]]
-name = "Bengaluru to Phuket one way, cheapest direct"
-trip = "Phuket, 22-26 January 2027"
-from = "BLR"
-to = "HKT"
-depart = "2027-01-22"
-
-[[watch]]
-name = "Phuket to Bengaluru one way, Akasa QP 624"
-trip = "Phuket, 22-26 January 2027"
-from = "HKT"
-to = "BLR"
-depart = "2027-01-26"
-flights = ["QP 624"]
-
-[[watch]]
-name = "Phuket to Bengaluru one way, cheapest direct"
-trip = "Phuket, 22-26 January 2027"
-from = "HKT"
-to = "BLR"
-depart = "2027-01-26"
-
-
-# ---------- Flexible dates (examples near your trips; delete if not wanted) ----------
-
-[[watch]]
-name = "Bengaluru to Phuket, cheapest day 15-31 January"
-trip = "Flexible dates"
-from = "BLR"
-to = "HKT"
-depart = "2027-01-15"
-depart_until = "2027-01-31"
-
-[[watch]]
-name = "Bengaluru - Singapore, cheapest 5-day trip starting 25 Feb - 10 Mar"
-trip = "Flexible dates"
-from = "BLR"
-to = "SIN"
-depart = "2027-02-25"
-depart_until = "2027-03-10"
-trip_days = 5
+flights = ["6E 1217", "any"]

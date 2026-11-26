@@ -49,7 +49,7 @@ def collect(config: Path, store) -> dict:
         store = FileStore(Path(store))
     settings, watches = tracker.load_config(config)
     state = store.load_state()
-    history = store.load_history()
+    history = store.load_history([w.id for w in watches]) if store.kind == "redis" else store.load_history()
     events = store.load_events()
     latest = store.load_latest()
 
@@ -57,19 +57,37 @@ def collect(config: Path, store) -> dict:
     for row in history:
         by_watch.setdefault(row["watch_id"], []).append(row)
 
+    searches = latest.get("searches", {})
     trips: dict[str, dict] = {}
     out_watches = []
     for w in watches:
         st = state.get("watches", {}).get(w.id, {})
+        points = _compress(sorted(by_watch.get(w.id, []), key=lambda r: r["checked_at"]))
+        # The flights behind today's price, and the other choices that fit the watch
+        # (e.g. each direct return when the return is "any").
+        opts = [tracker.Option(o["price"], tuple(o["flights"]), (), tuple(o.get("legs") or ()))
+                for o in (searches.get(w.search_id) or {}).get("options", [])]
+        fitting = sorted(tracker.matching_options(w, opts), key=lambda o: o.price)
+        current = next((o for o in fitting if list(o.flights) == (st.get("last_flights") or [])), None)
+        prices = [pr for _, pr in points if pr is not None]
+        # "Was" price, shown struck through: the price before the last move of
+        # at least ₹100 (smaller moves are mostly exchange-rate noise).
+        prev = next((pr for pr in reversed(prices[:-1]) if abs(pr - prices[-1]) >= 100), None) if prices else None
         out_watches.append({
-            "id": w.id, "name": w.name, "trip": w.trip,
+            "id": w.id, "name": w.name, "trip": w.trip, "who": w.who,
             "from": w.origin, "to": w.destination, "depart": w.depart, "return": w.ret,
             "depart_until": w.depart_until, "trip_days": w.trip_days,
             "flights": list(w.flights) if w.flights else None, "target": w.target,
             "search": w.search_id, "link": tracker.google_link(w),
             "state": {k: st.get(k) for k in ("last", "last_flights", "low", "low_at", "high",
                                               "first", "first_at", "misses", "last_seen_at")},
-            "points": _compress(sorted(by_watch.get(w.id, []), key=lambda r: r["checked_at"])),
+            "points": points,
+            "previous_price": prev,
+            "current": {"price": current.price, "flights": list(current.flights), "legs": list(current.legs)}
+            if current else None,
+            "choices": [{"price": o.price, "flights": list(o.flights), "legs": list(o.legs)} for o in fitting[:6]]
+            if w.flights and tracker.ANY in w.flights else [],
+            "checked_at": (state.get("searches", {}).get(w.search_id) or {}).get("checked_at"),
         })
         end = w.ret or w.depart_until or w.depart
         t = trips.setdefault(w.trip, {"name": w.trip, "start": w.depart, "end": end, "watches": []})
@@ -147,7 +165,7 @@ def build(config: Path, store, out: Path, demo: bool = False) -> Path:
 # --------------------------------------------------------------------------
 
 DEMO_START_PRICES = {  # roughly the real prices seen on 20 Nov 2026
-    "6E 1457/6E 1458": 28230, "6E 1203/6E 1204": 30798, "6E 1247/6E 1248": 26576,
+    "6E 1457/6E 1458": 27338, "6E 1203/6E 1204": 30798, "6E 1247/6E 1248": 26576,
     "6E 1207/6E 1208": 28041, "6E 1217/6E 1218": 39431, "QP 623/QP 624": 45727,
     "6E 1217/IX 931": 39346, "QP 623": 19838, "6E 1217": 18853, "QP 624": 25926, "IX 931": 20493,
 }
@@ -180,7 +198,8 @@ DEMO_EXTRA_OPTIONS = {  # other direct flights Google would list, (flights, toda
     ("BLR", "SIN", True): [(("6E 1247", "6E 1248"), 26576), (("SQ 509", "6E 1458"), 31840),
                            (("AI 2381", "6E 1458"), 33410)],
     ("DEL", "SIN", True): [(("6E 1207", "6E 1208"), 28041)],
-    ("BLR", "HKT", True): [(("6E 1217", "IX 931"), 39346)],
+    ("BLR", "HKT", True): [(("6E 1217", "IX 931"), 39089), (("6E 1217", "6E 1218"), 42850),
+                           (("6E 1217", "QP 624"), 43964), (("QP 623", "IX 931"), 36661)],
     ("BLR", "HKT", False): [(("6E 1217",), 18853)],
     ("HKT", "BLR", False): [(("IX 931",), 20493)],
 }
@@ -236,7 +255,7 @@ def demo_data(config: Path) -> dict:
             continue
         options = {o[0]: o[1] for o in DEMO_EXTRA_OPTIONS.get((w.origin, w.destination, bool(w.ret)), [])}
         for other in watches:
-            if other.search_id == w.search_id and other.flights:
+            if other.search_id == w.search_id and other.flights and tracker.ANY not in other.flights:
                 options.setdefault(other.flights, DEMO_START_PRICES.get("/".join(other.flights), 25000))
         paths[w.search_id] = {fl: _walk(rng, n, price, shared) for fl, price in options.items()}
     # Akasa round trip vanishes for 8 hours, to show a "not found" gap.
@@ -251,10 +270,11 @@ def demo_data(config: Path) -> dict:
         opts = paths[w.search_id]
         st = None
         for i, ts in enumerate(checks):
-            if w.flights:
+            if w.flights and tracker.ANY not in w.flights:
                 pr, fl = opts.get(w.flights, [None] * n)[i], w.flights
             else:
-                avail = [(p[i], f) for f, p in opts.items() if p[i] is not None]
+                avail = [(p[i], f) for f, p in opts.items()
+                         if p[i] is not None and (not w.flights or tracker.matches(w.flights, f))]
                 pr, fl = min(avail) if avail else (None, None)
             stamp = ts.isoformat()
             st, evs = tracker.evaluate(st, pr, fl if pr else None, w.target, settings, stamp)

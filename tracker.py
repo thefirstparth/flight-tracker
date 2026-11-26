@@ -117,6 +117,7 @@ class Watch:
     # or cheapest trip of trip_days days starting in that window (round trip).
     depart_until: str | None = None
     trip_days: int | None = None
+    who: str = ""  # optional label shown on the dashboard, e.g. "Parents"
 
     @property
     def flexible(self) -> bool:
@@ -158,8 +159,14 @@ class ConfigError(Exception):
     pass
 
 
+ANY = "any"
+
+
 def normalize_flight(text: str) -> str:
-    """'6e1457', '6E-1457', '6E 01457' -> '6E 1457'."""
+    """'6e1457', '6E-1457', '6E 01457' -> '6E 1457'; 'any' or '*' -> 'any'
+    (any direct flight that way, cheapest wins)."""
+    if str(text).strip().lower() in (ANY, "*"):
+        return ANY
     m = re.fullmatch(r"\s*([A-Za-z0-9]{2})\s*-?\s*(\d{1,5})\s*", str(text))
     if not m:
         raise ConfigError(f"flight {text!r} should look like '6E 1457'")
@@ -224,6 +231,8 @@ def load_config(path: Path) -> tuple[dict, list[Watch]]:
         flights = None
         if w.get("flights"):
             flights = tuple(normalize_flight(f) for f in w["flights"])
+            if all(f == ANY for f in flights):
+                flights = None  # "any" both ways is simply the cheapest direct option
             legs = 2 if ret else 1
             if len(flights) != legs:
                 raise ConfigError(
@@ -231,7 +240,7 @@ def load_config(path: Path) -> tuple[dict, list[Watch]]:
         target = float(w["target"]) if w.get("target") else None
         trip = str(w.get("trip") or default_trip(origin, destination, depart, ret or until))
         watches.append(Watch(wid, name, origin, destination, depart, ret, flights, target, trip,
-                             until, trip_days))
+                             until, trip_days, str(w.get("who") or "")))
     return settings, watches
 
 
@@ -288,7 +297,7 @@ def _search_once(key: tuple, settings: dict, needed: set[tuple] = frozenset()) -
     client = SearchFlights()
     locale = dict(currency=settings["currency"], country="IN", language="en")
     if ret and hasattr(client, "_fetch_flights"):
-        results = _round_trip(client, filters, locale, {f[0] for f in needed})
+        results = _round_trip(client, filters, locale, {f[0] for f in needed if f[0] != ANY})
     else:
         results = client.search(filters, top_n=ROUND_TRIP_OUTBOUND_OPTIONS, **locale) or []
     options = []
@@ -428,7 +437,7 @@ def fetch_options(key: tuple, settings: dict, needed: set[tuple], search=_search
         for o in options:
             if o.flights not in merged or o.price < merged[o.flights].price:
                 merged[o.flights] = o
-        if merged and needed <= merged.keys():
+        if merged and all_found(needed, merged.keys()):
             break
         if out_of_time():
             break
@@ -437,9 +446,26 @@ def fetch_options(key: tuple, settings: dict, needed: set[tuple], search=_search
     return sorted(merged.values(), key=lambda o: (o.price, o.times)) or None
 
 
+def matches(pattern: tuple[str, ...], flights: tuple[str, ...]) -> bool:
+    """Do these flights fit a watch's flight list ('any' matches any flight)?"""
+    return len(pattern) == len(flights) and all(p == ANY or p == f for p, f in zip(pattern, flights))
+
+
+def all_found(patterns, found) -> bool:
+    found = list(found)
+    return all(any(matches(p, f) for f in found) for p in patterns)
+
+
+def matching_options(watch: Watch, options: list[Option]) -> list[Option]:
+    if not watch.flights:
+        return list(options)
+    return [o for o in options if matches(watch.flights, o.flights)]
+
+
 def pick(watch: Watch, options: list[Option]) -> Option | None:
     if watch.flights:
-        return next((o for o in options if o.flights == watch.flights), None)
+        candidates = matching_options(watch, options)
+        return min(candidates, key=lambda o: (o.price, o.times)) if candidates else None
     return min(options, key=lambda o: (o.price, o.flights if watch.flexible else o.times)) if options else None
 
 
@@ -560,7 +586,7 @@ def event_message(kind: str, info: dict, w: Watch, st: dict, option: Option | No
         body = f"Available again at {inr(price)}"
     elif kind == "missing":
         head = f"⚠️ NOT FOUND: {w.name}"
-        body = (f"{', '.join(w.flights or ())} has not appeared in the last {st.get('misses')} checks "
+        body = (f"{' + '.join('any direct' if f == ANY else f for f in w.flights or ())} has not appeared in the last {st.get('misses')} checks "
                 "(sold out, schedule change, or no longer sold as a direct flight).")
         return "\n".join([head, body, link])
     else:
@@ -592,7 +618,7 @@ def summary_message(watches, state, history, now, title) -> str:
             change = " (no change in 24 h)" if abs(d) < 1 else f" ({'+' if d > 0 else '-'}{inr(abs(d))} in 24 h)"
         status = "  NOT FOUND on the last check" if st.get("misses") else ""
         lines.append(f"  {inr(st['last'])}{change} · low {inr(st['low'])} · high {inr(st['high'])}{status}")
-        if not w.flights and st.get("last_flights"):
+        if (not w.flights or ANY in w.flights) and st.get("last_flights"):
             if all(is_date(f) for f in st["last_flights"]):
                 lines.append(f"  cheapest dates: {' to '.join(st['last_flights'])}")
             else:
@@ -767,7 +793,7 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
             time.sleep(PAUSE_BETWEEN_SEARCHES)
         results[key] = fetch_options(key, settings, needed[key])
         found = {o.flights for o in results[key] or []}
-        if results[key] is not None and out_of_time() and not needed[key] <= found:
+        if results[key] is not None and out_of_time() and not all_found(needed[key], found):
             # Cut short by the time budget: watched flights may simply not have
             # been reached, so do not count them as missing; retry next run.
             incomplete.add(key)
