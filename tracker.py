@@ -1056,7 +1056,7 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
     if dry_run:
         log("\n(dry run: nothing saved)")
     else:
-        if results:
+        if report["answered"]:  # the time of the latest prices, not of the latest attempt
             state["updated_at"] = now
         store.save_state(state)
         store.add_history(history_rows)

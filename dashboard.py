@@ -106,6 +106,8 @@ def collect(config: Path, store) -> dict:
         "updated_at": state.get("updated_at"),
         "failed_runs": state.get("failed_runs", 0),
         "google_status": state.get("google") or {},
+        # when the newest prices on the page were fetched (a refused attempt does not count)
+        "prices_at": max((v.get("checked_at") or "" for v in (latest.get("searches") or {}).values()), default=None) or None,
         "check_every_minutes": settings["check_every_minutes"],
         "owner": settings["owner_name"],
         "rules": {k: settings[k] for k in ("drop_alert_rupees", "drop_alert_percent",
