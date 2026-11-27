@@ -85,3 +85,7 @@ to = "HKT"
 depart = "2027-01-22"
 return = "2027-01-26"
 flights = ["6E 1217 | QP 623", "any"]
+# Alert when the round trip falls to the top of Google's typical range (it sat
+# around ₹35,000 from late October to mid-November). Hotels are booked for
+# these exact dates, so no alternative dates are tracked.
+target = 37000

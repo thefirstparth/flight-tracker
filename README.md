@@ -36,6 +36,21 @@ Everything runs on free plans with no card: **Vercel** (app and checks),
 **Upstash Redis** (stored prices) and **Upstash QStash** (the 10-minute
 schedule), both added from inside Vercel, plus **Telegram**.
 
+## Install it like an app
+
+The dashboard is an installable web app (it has an app manifest, icons and a
+small service worker, which also keeps the last dashboard for when you are
+offline and forgets it when you log out).
+
+- **iPhone (Safari):** open the address, tap Share → **Add to Home Screen**.
+- **Android (Chrome):** open the address, tap ⋮ → **Install app** (or "Add to
+  Home screen").
+- **Mac or Windows (Chrome or Edge):** open the address and click the install
+  icon at the right of the address bar (or ⋮ → **Install Flight Prices**).
+  On a Mac with Safari: File → **Add to Dock**.
+
+Log in once inside the installed app; it stays logged in for 90 days.
+
 ## Put it live on Vercel (about 15 minutes, once)
 
 1. **Vercel account** (Hobby, free): sign up at vercel.com.

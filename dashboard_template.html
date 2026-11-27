@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#e7e5e0">
+<!--__PWA_HEAD__-->
 <title>Flight Prices</title>
 <style>
 /* One theme, between light and dark: warm stone, airport-signage navy, and
@@ -698,6 +699,9 @@ header();
 document.getElementById("trips").replaceChildren(...((D.trips || []).length ? D.trips.map(trip)
   : [h("div", {class: "empty"}, "No flights tracked yet.")]));
 setInterval(() => { if (!document.querySelector(".spin")) header(); }, MIN);
+if (D.web && "serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});  // installable app + offline copy
+}
 </script>
 </body>
 </html>

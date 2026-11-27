@@ -200,8 +200,8 @@ class CheckLoop(unittest.TestCase):
 
     def test_default_alerts_are_price_changes_only(self):
         with mock.patch.dict(tracker.DEFAULT_SETTINGS, {"alerts": ["drop", "rise", "target"]}):
-            tracker.check(CONFIG, self.store)  # first prices: no "started" message
-            self.send.assert_not_called()
+            tracker.check(CONFIG, self.store)  # first prices: no "started" message (a target hit is allowed)
+            self.assertFalse(any("Flight tracker started" in c[0][0] for c in self.send.call_args_list))
             state = self.store.load_state()
             for info in state["searches"].values():
                 info["checked_at"] = "2000-01-01T00:00:00+05:30"  # make everything due again
@@ -368,6 +368,23 @@ class WebApp(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b"Telegram alerts", body)
         self.assertIn(b"QStash not connected", body)
+
+    def test_app_files_are_public_and_dashboard_is_installable(self):
+        for path, ctype in (("/manifest.webmanifest", "application/manifest+json"), ("/sw.js", "text/javascript"),
+                            ("/icon-192.png", "image/png"), ("/apple-touch-icon.png", "image/png")):
+            status, headers, body = self.call("GET", path)
+            self.assertEqual(status, 200, path)
+            self.assertTrue(dict(headers)["Content-Type"].startswith(ctype), path)
+            self.assertTrue(body)
+        manifest = json.loads(self.call("GET", "/manifest.webmanifest")[2])
+        self.assertEqual(manifest["display"], "standalone")
+        self.assertEqual({i["sizes"] for i in manifest["icons"]}, {"192x192", "512x512"})
+        _, _, login = self.call("GET", "/")
+        self.assertIn(b'rel="manifest"', login)
+        self.assertIn(b'caches.delete("flight-prices-v1")', login)
+        _, _, dash = self.call("GET", "/", self.login())
+        self.assertIn(b'rel="manifest"', dash)
+        self.assertNotIn(b"<!--__PWA_HEAD__-->", dash)
 
     def test_schedule_request(self):
         sent = {}

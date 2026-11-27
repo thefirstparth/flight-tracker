@@ -107,7 +107,15 @@ Rules:
 - **Buttons:** Book is the only filled button (navy pill). Refresh and the menu
   (Setup, Log out) are round icon buttons.
 
-## 6. Writing
+## 6. App icon and install
+
+- Icon: the airport-signage navy (`#1f3a5f`) square, full bleed, with the
+  Material "flight" plane in `--panel` stone, turned 45° (take-off). Source:
+  `static/icon.svg`; PNGs at 512, 192, 180 (Apple) and 32 (favicon).
+- Installed app: name "Flight Prices", short name "Flights", standalone,
+  background and theme colour `--bg` (`#e7e5e0`).
+
+## 7. Writing
 
 - Plain words, short. "Lowest price we've seen", not "Price index minimum".
 - Every date has its weekday: "Fri 22 Jan".
@@ -115,7 +123,7 @@ Rules:
   tight: ₹43.7k.
 - Say what a comparison is based on: "Cheapest direct round trip on any airline".
 
-## 7. Do and don't
+## 8. Do and don't
 
 - ✅ Keep one theme. ✅ Keep every price next to its context.
 - ✅ Say what advice is based on; call it a guide, not a prediction.
