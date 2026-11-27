@@ -51,8 +51,8 @@ IST = timezone(timedelta(hours=5, minutes=30))
 # retried a couple of times. More than that only makes Google refuse for longer:
 # when a search gets no answer at all, the run stops and the next runs pause
 # (BACKOFF_MINUTES), so a refusing Google is left alone instead of hammered.
-SEARCH_ATTEMPTS = 3
-RETRY_WAIT_SECONDS = (1, 2)
+SEARCH_ATTEMPTS = 2  # each try is already up to 3 page loads inside the flights library
+RETRY_WAIT_SECONDS = (2,)
 BACKOFF_MINUTES = (20, 40, 60)  # pause after 1, 2, 3+ runs in a row with no answer
 _last_problem: str | None = None  # what the last failed request looked like, for logs and status
 _last_response: str | None = None  # the start of Google's last empty answer, for the logs
@@ -360,21 +360,24 @@ def parse_price_insight(inner) -> dict | None:
 
 
 def _shopping(client, filters, locale: dict, key: tuple | None = None):
-    """One Google Flights shopping request: the flights, and (kept aside under
-    `key`) Google's price insight from the same answer."""
+    """One Google Flights search: the flights, and (kept aside under `key`)
+    Google's price insight from the same answer.
+
+    Reads Google's ordinary search page (www.google.com/travel/flights?tfs=...),
+    as the flights library does since version 0.11: since August 2026 Google's
+    internal GetShoppingResults request needs a header only its own page
+    script can make, and answers anything else with an empty error.
+    """
     try:
         from fli.search._decoders import parse_flight_row
-        from fli.search._urls import with_locale_params
-        from fli.search._wire import parse_first_wrb_payload
+        from fli.search._tfs import build_tfs, fetch_payload, page_url
     except ImportError:  # library changed: flights only
         return client._fetch_flights(filters, capture_session=True, **locale)
-    url = with_locale_params(client.BASE_URL, locale.get("currency"), locale.get("language"), locale.get("country"))
-    response = client.client.post(url=url, data=f"f.req={filters.encode()}", impersonate="chrome", allow_redirects=True)
-    response.raise_for_status()
-    inner = parse_first_wrb_payload(response.text)
+    url = page_url(build_tfs(filters), locale.get("currency"), locale.get("language"), locale.get("country"))
+    inner = fetch_payload(client.client, url)  # the library retries an empty page twice itself
     if not inner:
         global _last_response
-        _last_response = f"HTTP {response.status_code}, {len(response.text)} bytes: {response.text[:100]!r}"
+        _last_response = "search page without results (blocked, consent or bot-check page)"
         return None
     rows = [item for i in (2, 3) if len(inner) > i and isinstance(inner[i], list) for item in inner[i][0]]
     flights = []
@@ -929,6 +932,8 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
         results[key] = fetch_options(key, settings, needed[key])
         if key in _google_insights:
             google[search_id(key)] = {"checked_at": now, **_google_insights.pop(key)}
+            g = google[search_id(key)]
+            log(f"  Google's usual price: {inr(g['low'])}-{inr(g['high'])}, {len(g['history'])} days of history")
         found = {o.flights for o in results[key] or []}
         if results[key] is not None and out_of_time() and not all_found(needed[key], found):
             # Cut short by the time budget: watched flights may simply not have
@@ -1079,20 +1084,54 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
 # Date comparisons (dashboard only)
 # --------------------------------------------------------------------------
 
+def _cheapest_on(origin: str, destination: str, depart: str, ret: str | None, settings: dict) -> float | None:
+    """Cheapest direct price for one date pair: one search page. For a round
+    trip each outbound row already carries the cheapest round trip with it."""
+    _tune_library()
+    from fli.core.builders import build_flight_segments
+    from fli.models import Airport, FlightSearchFilters, MaxStops, PassengerInfo, SortBy
+    from fli.search import SearchFlights
+    segments, trip_type = build_flight_segments(Airport[origin], Airport[destination], depart, ret)
+    filters = FlightSearchFilters(
+        trip_type=trip_type, passenger_info=PassengerInfo(adults=int(settings["adults"])),
+        flight_segments=segments, stops=MaxStops.NON_STOP if settings["direct_only"] else MaxStops.ANY,
+        sort_by=SortBy.CHEAPEST)
+    rows = _shopping(SearchFlights(), filters, dict(currency=settings["currency"], country="IN", language="en")) or []
+    prices = [r.price for r in rows if r.price is not None and not (settings["direct_only"] and r.stops)]
+    return float(min(prices)) if prices else None
+
+
 def _date_grid(origin: str, destination: str, start: date, end: date, days: int | None,
                settings: dict) -> dict[tuple, float]:
-    """Cheapest direct price per departure day (and return day) from Google's date grid."""
-    key = (origin, destination, f"{start.isoformat()}..{end.isoformat()}", f"{days}d" if days else None)
-    rows = _with_retries(lambda: _search_dates(key, settings),
-                         f"date grid {origin}-{destination} {start}..{end}" + (f" {days}d" if days else "")) or []
-    return {o.flights: o.price for o in rows}
+    """Cheapest direct price per departure day (and return day) from start to end.
+
+    Google's search page has no date grid, so each day costs one page load:
+    callers ask only for the days they need (usually one at a time)."""
+    out: dict[tuple, float] = {}
+    d = start
+    while d <= end:
+        r = d + timedelta(days=days) if days else None
+        dates = (d.isoformat(),) + ((r.isoformat(),) if r else ())
+        price = _with_retries(lambda: _cheapest_on(origin, destination, dates[0], r.isoformat() if r else None,
+                                                    settings), f"price on {' to '.join(dates)}")
+        if price:
+            out[dates] = price
+        d += timedelta(days=1)
+        if d <= end:
+            time.sleep(PAUSE_BETWEEN_SEARCHES)
+    return out
 
 
 def trip_insights(w: Watch, settings: dict, today: date, grid_fn=None) -> dict | None:
     """How a watch's dates compare: the same trip on the same weekday within
     30 days either side, and leaving or returning one day earlier or later.
     Prices are the cheapest direct option on any airline for each date pair."""
+    live = grid_fn is None
     grid_fn = grid_fn or _date_grid
+
+    def pause():  # between live page loads only (not for the demo or tests)
+        if live:
+            time.sleep(PAUSE_BETWEEN_SEARCHES)
     dep = date.fromisoformat(w.depart)
     ret = date.fromisoformat(w.ret) if w.ret else None
     days = (ret - dep).days if ret else None
@@ -1100,7 +1139,16 @@ def trip_insights(w: Watch, settings: dict, today: date, grid_fn=None) -> dict |
     start, end = max(dep - timedelta(days=30), first_day), dep + timedelta(days=30)
     if end < first_day:
         return None
-    grid = grid_fn(w.origin, w.destination, start, end, days, settings)
+    # One page per date: the same weekday in each week of the window, then the
+    # days around yours. Gentle on Google: a short pause between pages.
+    grid: dict = {}
+    d = start + timedelta(days=(dep.weekday() - start.weekday()) % 7)
+    while d <= end:
+        if out_of_time():
+            return None  # finished on a later run
+        grid.update(grid_fn(w.origin, w.destination, d, d, days, settings))
+        pause()
+        d += timedelta(days=7)
     if not grid:
         return None
 
@@ -1120,15 +1168,14 @@ def trip_insights(w: Watch, settings: dict, today: date, grid_fn=None) -> dict |
             wanted.setdefault((r - d).days if r else None, []).append((d, r))
     nearby = []
     for length, pairs in wanted.items():
-        if length == days:
-            g = grid
-        elif out_of_time():
-            g = {}
-        else:
-            g = grid_fn(w.origin, w.destination, min(d for d, _ in pairs), max(d for d, _ in pairs), length, settings)
         for d, r in pairs:
+            if pair(d, r) not in grid:
+                if out_of_time():
+                    return None  # finished on a later run
+                grid.update(grid_fn(w.origin, w.destination, d, d, length, settings))
+                pause()
             nearby.append({"depart": d.isoformat(), "return": r.isoformat() if r else None,
-                           "price": g.get(pair(d, r))})
+                           "price": grid.get(pair(d, r))})
     nearby.sort(key=lambda x: (x["depart"], x["return"] or ""))
     yours = grid.get(pair(dep, ret))
     # Google's date grid occasionally returns a nonsense price (e.g. ₹413 for an
@@ -1286,6 +1333,9 @@ def refresh_insights(active: list[Watch], settings: dict, store, now_dt: datetim
             result = None
         if result:
             current[sid] = {"checked_at": now_dt.isoformat(), "ok": True, **result}
+        elif out_of_time():
+            log("  date comparison not finished: continues on the next run")
+            break
         else:
             current[sid] = {**info, "ok": False, "failed_at": now_dt.isoformat()}  # keep the last good numbers
     return current

@@ -181,7 +181,7 @@ class Picking(unittest.TestCase):
 
 class Retrying(unittest.TestCase):
     def test_retries_until_needed_flights_seen(self):
-        answers = iter([[], [Picking.opts[0]], [Picking.opts[1]]])
+        answers = iter([[Picking.opts[0]], [Picking.opts[1]]])  # the needed pair shows up on the second try
         calls = []
 
         def fake(key, settings, needed):
@@ -189,7 +189,7 @@ class Retrying(unittest.TestCase):
             return next(answers)
         got = t.fetch_options(("BLR", "SIN", "d", None), S, {("6E 1457", "6E 1458")},
                               search=fake, sleep=lambda s: None)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 2)
         self.assertEqual([o.price for o in got], [26576, 28230])
 
     def test_gives_up_with_none(self):

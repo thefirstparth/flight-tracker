@@ -76,7 +76,25 @@ jobs:
         if: ${{ inputs.test }}
         env:
           CHECKER: github-test
-        run: python tracker.py --dry-run --force
+        run: |
+          python tracker.py --dry-run --force
+          python - <<'PY'
+          import time
+          from datetime import date
+          from pathlib import Path
+          import tracker
+          settings, watches = tracker.load_config(Path("watches.toml"))
+          w = watches[0]
+          tracker._deadline = time.monotonic() + 120
+          t0 = time.time()
+          ins = tracker.trip_insights(w, settings, date.today())
+          print(f"\nDate comparison for {w.origin}-{w.destination} in {time.time() - t0:.0f}s:")
+          if not ins:
+              print("  none")
+          else:
+              print("  same weekday:", [(x["depart"], x["price"]) for x in ins["similar"]])
+              print("  a day either side:", [(x["depart"], x["return"], x["price"]) for x in ins["nearby"]])
+          PY
 
       - name: Check prices
         if: ${{ !inputs.test && inputs.probe == '' }}
