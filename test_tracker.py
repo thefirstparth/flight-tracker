@@ -103,6 +103,19 @@ class BookOrWait(unittest.TestCase):
         self.assertTrue(any("peak" in x["text"] for x in r["reasons"]))
         self.assertLessEqual(r["score"], 60)
 
+    def test_whole_season_high_is_explained_not_contradicted(self):
+        # The live Singapore case: above Google's range, but every nearby week is dearer still.
+        comparison = {"yours": 26576, "similar": [{"depart": d, "price": p} for d, p in (
+            ("2027-02-02", 26576), ("2027-02-09", 31000), ("2027-02-16", 30400), ("2027-02-23", 28200),
+            ("2027-03-02", 26576), ("2027-03-09", 29700), ("2027-03-16", 29700), ("2027-03-23", 29700),
+            ("2027-03-30", 26800))]}
+        hist = [["d", 26000.0]] * 30
+        plain = t.book_or_wait(self.g(26576, 17000, 25500, hist), None, "2027-03-02", self.TODAY)
+        r = t.book_or_wait(self.g(26576, 17000, 25500, hist), comparison, "2027-03-02", self.TODAY)
+        self.assertIn("whole season", r["summary"])
+        self.assertTrue(any("cheaper than the same trip in other weeks" in x["text"] for x in r["reasons"]))
+        self.assertLess(r["score"], plain["score"])
+
     def test_last_three_weeks(self):
         r = t.book_or_wait(self.g(30000), None, "2026-12-10", self.TODAY)
         self.assertTrue(any("last three weeks" in x["text"] for x in r["reasons"]))

@@ -670,7 +670,14 @@ function header() {
   const sub = document.getElementById("sub"), dotEl = document.getElementById("dot");
   const last = t(D.updated_at);
   let warn = false;
-  if (D.failed_runs > 0) { sub.textContent = `Google didn't answer the last ${D.failed_runs} check${D.failed_runs === 1 ? "" : "s"} · retrying`; warn = true; }
+  const G = D.google_status || {};
+  if (G.refused_runs > 0) {
+    const since = t(G.last_answer_at) || last;
+    const next = t(G.pause_until);
+    sub.textContent = `Google isn't answering · prices from ${since ? ago(since) : "earlier"}` +
+      (next && next > Date.now() ? ` · next try ${new Intl.DateTimeFormat("en-GB", {timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true}).format(new Date(next))}` : " · retrying");
+    warn = true;
+  }
   else if (!last) sub.textContent = "Waiting for the first price check";
   else {
     const stale = Date.now() - last > 3 * (D.check_every_minutes || 30) * MIN;

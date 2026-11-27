@@ -250,7 +250,9 @@ def handle(method: str, raw_path: str, headers: dict, body: bytes) -> Response:
             state = store.load_state() if store else {}
             return as_json(200, {"ok": store is not None and template_ok, "storage": store.kind if store else None,
                                  "watches": watches, "page_template": template_ok,
-                                 "updated_at": state.get("updated_at"), "failed_runs": state.get("failed_runs", 0)})
+                                 "updated_at": state.get("updated_at"), "failed_runs": state.get("failed_runs", 0),
+                                 "google": {k: (state.get("google") or {}).get(k) for k in
+                                            ("last_answer_at", "refused_runs", "pause_until", "last_problem")}})
         except Exception as e:
             return as_json(500, {"ok": False, "error": type(e).__name__})
 

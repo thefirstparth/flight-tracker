@@ -184,6 +184,33 @@ class CheckLoop(unittest.TestCase):
         self.assertEqual(self.store.load_state()["failed_runs"], 0)
         self.assertFalse(any("no prices from Google" in c[0][0] for c in self.send.call_args_list))
 
+    def test_refusal_stops_the_run_and_backs_off(self):
+        calls = []
+
+        def refused(key, settings, needed, **kw):
+            calls.append(key)
+            return None
+        with mock.patch.object(tracker, "fetch_options", side_effect=refused), \
+                mock.patch.object(tracker, "refresh_insights") as ins:
+            r1 = tracker.check(CONFIG, self.store)
+            self.assertEqual(len(calls), 1)  # stopped at the first refusal
+            ins.assert_not_called()  # no date comparisons while Google refuses
+            g = self.store.load_state()["google"]
+            self.assertEqual(g["refused_runs"], 1)
+            self.assertIn("pause_until", g)
+            r2 = tracker.check(CONFIG, self.store)  # inside the 20-minute pause: nothing searched
+            self.assertTrue(r2["paused"])
+            self.assertEqual(len(calls), 1)
+            tracker.check(CONFIG, self.store, force=True)  # the Check now button ignores the pause
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(self.store.load_state()["google"]["refused_runs"], 2)
+        self.assertFalse(r1["paused"])
+        tracker.check(CONFIG, self.store, force=True)  # Google answers again
+        g = self.store.load_state()["google"]
+        self.assertEqual(g["refused_runs"], 0)
+        self.assertNotIn("pause_until", g)
+        self.assertTrue(g["last_answer_at"])
+
     def test_budget_cut_does_not_count_as_missing(self):
         budget = {"used_up": False}
 
