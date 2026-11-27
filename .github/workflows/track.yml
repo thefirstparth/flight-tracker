@@ -15,6 +15,11 @@ on:
   schedule:
     - cron: "7,37 * * * *"   # every 30 minutes (GitHub often starts it a few minutes late)
   workflow_dispatch:
+    inputs:
+      test:
+        description: "Test only: one search per route from GitHub's servers; saves nothing, sends nothing, needs no secrets"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,7 +43,14 @@ jobs:
       - name: Install
         run: pip install -r requirements.txt
 
+      - name: Test search (nothing saved or sent)
+        if: ${{ inputs.test }}
+        env:
+          CHECKER: github-test
+        run: python tracker.py --dry-run --force
+
       - name: Check prices
+        if: ${{ !inputs.test }}
         env:
           CHECKER: github
           KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
