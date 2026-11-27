@@ -20,6 +20,10 @@ on:
         description: "Test only: one search per route from GitHub's servers; saves nothing, sends nothing, needs no secrets"
         type: boolean
         default: false
+      probe:
+        description: "Test only: one round-trip search with this version of the flights library (e.g. 0.11.1)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -43,6 +47,31 @@ jobs:
       - name: Install
         run: pip install -r requirements.txt
 
+      - name: Probe a library version (nothing saved or sent)
+        if: ${{ inputs.probe != '' }}
+        env:
+          PROBE: ${{ inputs.probe }}
+        run: |
+          pip install -q "flights==$PROBE"
+          python - <<'PY'
+          import time
+          from fli.core.builders import build_flight_segments
+          from fli.models import Airport, FlightSearchFilters, MaxStops, PassengerInfo, SortBy
+          from fli.search import SearchFlights
+          segs, tt = build_flight_segments(Airport["BLR"], Airport["SIN"], "2027-03-02", "2027-03-07")
+          f = FlightSearchFilters(trip_type=tt, passenger_info=PassengerInfo(adults=1), flight_segments=segs,
+                                  stops=MaxStops.NON_STOP, sort_by=SortBy.CHEAPEST)
+          t0 = time.time()
+          try:
+              rows = SearchFlights().search(f, top_n=3, currency="INR", country="IN", language="en") or []
+          except Exception as e:
+              print("FAILED:", type(e).__name__, str(e)[:300]); rows = []
+          print(f"{len(rows)} round trips in {time.time() - t0:.1f}s")
+          for r in rows[:5]:
+              parts = r if isinstance(r, tuple) else (r,)
+              print(" / ".join(f"{l.airline.name} {l.flight_number}" for p in parts for l in p.legs), parts[-1].price)
+          PY
+
       - name: Test search (nothing saved or sent)
         if: ${{ inputs.test }}
         env:
@@ -50,7 +79,7 @@ jobs:
         run: python tracker.py --dry-run --force
 
       - name: Check prices
-        if: ${{ !inputs.test }}
+        if: ${{ !inputs.test && inputs.probe == '' }}
         env:
           CHECKER: github
           KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
