@@ -1179,6 +1179,9 @@ def _price_on(origin: str, destination: str, depart: str, ret: str | None, setti
 # several): one page per date pair. Prices are remembered for a couple of hours
 # so a check that needs more pages than one run allows continues on the next run.
 WINDOW_PRICE_HOURS = 2
+# Airlines sell about 11 months ahead, and Google answers dates further out with
+# the same empty page it uses when it refuses: such dates are not searched at all.
+BOOKING_HORIZON_DAYS = 330
 _window_prices: dict[str, dict[str, list]] = {}  # search id -> "depart|return" -> [price or None, unix time]
 _unfinished: set[tuple] = set()  # window searches cut short by the run's time budget
 _answered_empty: set[tuple] = set()  # window searches where Google answered: nothing on sale
@@ -1197,6 +1200,14 @@ def _search_windows(key: tuple, settings: dict) -> list[Option]:
     back on any day of another; then the real flights for the cheapest pair."""
     origin, destination, dwin, rwin = key
     pairs = [(d, r) for d in _days(*dwin.split("..")) for r in _days(*rwin.split("..")) if r > d]
+    last_day = (datetime.now(IST).date() + timedelta(days=BOOKING_HORIZON_DAYS)).isoformat()
+    on_sale = [(d, r) for d, r in pairs if r <= last_day]
+    if not on_sale:
+        _answered_empty.add(key)
+        opens = min(date.fromisoformat(r) for _, r in pairs) - timedelta(days=BOOKING_HORIZON_DAYS)
+        log(f"    not on sale yet: searched from about {opens:%-d %b %Y}")
+        return []
+    pairs = on_sale
     memo = _window_prices.setdefault(search_id(key), {})
     priced, answered = {}, False
     for d, r in pairs:

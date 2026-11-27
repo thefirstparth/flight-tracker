@@ -211,6 +211,17 @@ class CheckLoop(unittest.TestCase):
         self.assertNotIn("pause_until", g["checkers"][tracker.CHECKER])
         self.assertTrue(g["last_answer_at"])
 
+    def test_not_on_sale_is_not_google_refusing(self):
+        def not_on_sale(key, settings, needed, **kw):
+            tracker._answered_empty.add(key)  # what a window search does when no dates are on sale
+            return None
+        with mock.patch.object(tracker, "fetch_options", side_effect=not_on_sale):
+            report = tracker.check(CONFIG, self.store, force=True)
+        g = self.store.load_state()["google"]
+        self.assertEqual(report["answered"], report["checked"])
+        self.assertEqual(g.get("refused_runs"), 0)
+        self.assertFalse(any("no prices" in c[0][0] for c in self.send.call_args_list))
+
     def test_date_comparison_spreads_over_runs(self):
         loads = []
 

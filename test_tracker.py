@@ -211,6 +211,14 @@ class DateWindows(unittest.TestCase):
         t._deadline = None
         p = mock.patch.object(t.time, "sleep")
         p.start(); self.addCleanup(p.stop)
+        h = mock.patch.object(t, "BOOKING_HORIZON_DAYS", 100000)
+        h.start(); self.addCleanup(h.stop)
+
+    def test_beyond_booking_horizon_is_not_searched(self):
+        with mock.patch.object(t, "BOOKING_HORIZON_DAYS", 0), mock.patch.object(t, "_cheapest_on") as page:
+            self.assertEqual(t._search_windows(self.KEY, S), [])
+        page.assert_not_called()
+        self.assertIn(self.KEY, t._answered_empty)
 
     def test_cheapest_pair_then_its_flights(self):
         prices = {("2027-10-23", "2027-10-31"): 9000.0, ("2027-10-24", "2027-10-31"): 8000.0,
