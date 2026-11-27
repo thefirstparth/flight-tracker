@@ -5,7 +5,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
-      "includeFiles": "{app.py,tracker.py,dashboard.py,store.py,dashboard_template.html,watches.toml}"
+      "includeFiles": "{app.py,tracker.py,dashboard.py,store.py,dashboard_template.html,watches.toml,static/**}"
     }
   },
   "rewrites": [

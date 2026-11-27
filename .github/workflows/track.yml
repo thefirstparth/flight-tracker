@@ -1,0 +1,54 @@
+# Second checker: runs the same price check from GitHub's servers every 30
+# minutes, sharing the Vercel app's storage (Upstash Redis). Both use the same
+# lock and the same "what is due" rules, so a route is searched by whichever
+# runs first, and alerts are never sent twice. When Google refuses Vercel,
+# the routes stay due and this checker picks them up.
+#
+# Needs four repository secrets (Settings > Secrets and variables > Actions):
+#   KV_REST_API_URL, KV_REST_API_TOKEN   - the same values as in Vercel
+#   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID - the same values as in Vercel
+# Until the storage secrets exist it does nothing.
+
+name: Check flight prices
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"   # every 30 minutes (GitHub often starts it a few minutes late)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flight-tracker
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12   # the tracker stops retrying after 8 minutes
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Check prices
+        env:
+          CHECKER: github
+          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
+          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          APP_URL: https://flight-tracker-snowy.vercel.app
+        run: |
+          if [ -z "$KV_REST_API_URL" ] || [ -z "$KV_REST_API_TOKEN" ]; then
+            echo "::notice::Storage secrets are not set yet, so nothing was checked."
+            exit 0
+          fi
+          python tracker.py

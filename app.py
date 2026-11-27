@@ -41,6 +41,24 @@ SESSION_SECONDS = 90 * 24 * 3600
 CHECK_BUDGET_SECONDS = 45  # the Vercel function stops at 60 s
 LOCK_SECONDS = 70
 QSTASH_SCHEDULE_ID = "flight-tracker-check"
+STATIC = HERE / "static"
+# Installable-app files: no prices or routes in them, so no password needed.
+PUBLIC_FILES = {
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json", "public, max-age=3600"),
+    "/sw.js": ("sw.js", "text/javascript; charset=utf-8", "no-cache"),
+    "/icon-192.png": ("icon-192.png", "image/png", "public, max-age=604800"),
+    "/icon-512.png": ("icon-512.png", "image/png", "public, max-age=604800"),
+    "/apple-touch-icon.png": ("apple-touch-icon.png", "image/png", "public, max-age=604800"),
+    "/favicon.ico": ("favicon-32.png", "image/png", "public, max-age=604800"),
+    "/favicon-32.png": ("favicon-32.png", "image/png", "public, max-age=604800"),
+}
+PWA_HEAD = """<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Flights">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">"""
 QSTASH_CRON = "*/10 * * * *"
 
 Response = tuple[int, list[tuple[str, str]], bytes]
@@ -123,7 +141,7 @@ def redirect(to: str, extra: list | None = None) -> Response:
 def simple_page(title: str, inner: str) -> str:
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
-<title>{html.escape(title)}</title><style>
+<title>{html.escape(title)}</title>{PWA_HEAD}<meta name="theme-color" content="#e7e5e0"><style>
 :root{{color-scheme:light dark;--bg:#f9f9f7;--card:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--border:rgba(11,11,11,.12);--accent:#2a78d6;--good:#006300;--bad:#b42525}}
 @media (prefers-color-scheme:dark){{:root{{--bg:#0d0d0d;--card:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--border:rgba(255,255,255,.12);--accent:#3987e5;--good:#0ca30c;--bad:#e66767}}}}
 body{{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}}
@@ -144,7 +162,11 @@ def login_page(error: str = "") -> str:
 <div class="card"><form method="post" action="/login">{err}
 <label for="pw">Password</label>
 <input id="pw" name="password" type="password" autocomplete="current-password" autofocus required>
-<button type="submit">Open dashboard</button></form></div>""")
+<button type="submit">Open dashboard</button></form></div>
+<script>
+// Logged out or not yet logged in: forget the offline copy of the dashboard.
+try {{ if ("caches" in window) caches.delete("flight-prices-v1"); }} catch (e) {{}}
+</script>""")
 
 
 # --------------------------------------------------------------------------
@@ -242,6 +264,15 @@ def handle(method: str, raw_path: str, headers: dict, body: bytes) -> Response:
     path = "/" + path.lstrip("/")
     form = urllib.parse.parse_qs(body.decode("utf-8", "replace")) if method == "POST" else {}
 
+    if path in PUBLIC_FILES and method in ("GET", "HEAD"):
+        name, ctype, cache = PUBLIC_FILES[path]
+        try:
+            body = (STATIC / name).read_bytes()
+        except OSError:
+            return page(404, simple_page("Not found", "<h1>Not found</h1>"))
+        extra = [("Service-Worker-Allowed", "/")] if name == "sw.js" else []
+        return 200, [("Content-Type", ctype), ("Cache-Control", cache), ("X-Content-Type-Options", "nosniff")] + extra, body
+
     if path == "/health":  # no prices or routes here: safe without a password
         store = get_store()
         try:
@@ -252,7 +283,8 @@ def handle(method: str, raw_path: str, headers: dict, body: bytes) -> Response:
                                  "watches": watches, "page_template": template_ok,
                                  "updated_at": state.get("updated_at"), "failed_runs": state.get("failed_runs", 0),
                                  "google": {k: (state.get("google") or {}).get(k) for k in
-                                            ("last_answer_at", "refused_runs", "pause_until", "last_problem")}})
+                                            ("last_answer_at", "answered_by", "refused_runs", "pause_until", "last_problem",
+                                                      "checkers")}})
         except Exception as e:
             return as_json(500, {"ok": False, "error": type(e).__name__})
 
@@ -323,6 +355,6 @@ def handle(method: str, raw_path: str, headers: dict, body: bytes) -> Response:
             answered, _, total = checked.partition("-")
             notice = f"Checked {total} route(s) now; Google answered {answered}."
         data["web"] = {"check_now": "/check-now", "logout": "/logout", "setup": "/setup", "notice": notice}
-        return page(200, dashboard.render(data))
+        return page(200, dashboard.render(data, extra_head=PWA_HEAD))
 
     return page(404, simple_page("Not found", "<h1>Not found</h1><p><a href='/'>Dashboard</a></p>"))

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#e7e5e0">
+<!--__PWA_HEAD__-->
 <title>Flight Prices</title>
 <style>
 /* Fare board: one theme (warm stone), airport-signage navy, colour only for meaning.
@@ -12,7 +13,7 @@
 :root {
   color-scheme: light;
   --bg: #e7e5e0; --panel: #f6f5f2; --inset: #eeece7; --line: #dcd8d0;
-  --ink: #161513; --ink-2: #57544e; --ink-3: #807c75;
+  --ink: #161513; --ink-2: #57544e; --ink-3: #67635c;
   --navy: #1f3a5f; --navy-wash: #dfe5ec;
   --down: #12744a; --down-bg: #d9ede1; --up: #b3321f; --up-bg: #f5ded8; --amber: #835800; --amber-bg: #f1e6c9;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
@@ -26,10 +27,10 @@ body { margin: 0; background: var(--bg); color: var(--ink);
 a { color: var(--navy); text-decoration: none; }
 button { font: inherit; color: inherit; }
 .num { font-variant-numeric: tabular-nums; }
-.mono { font-family: var(--mono); }
-.caps { font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .wrap { max-width: 720px; margin: 0 auto; padding: max(24px, env(safe-area-inset-top)) 16px 64px; }
 :focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; border-radius: 12px; }
+h1:focus { outline: none; }
 @media (prefers-reduced-motion: no-preference) {
   .view { animation: enter 0.24s ease both; }
   @keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -37,12 +38,12 @@ button { font: inherit; color: inherit; }
 
 /* top bar */
 .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.top h1 { margin: 4px 0 0; font-size: 32px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; }
+.top h1 { margin: 0; font-size: 32px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; }
 .status { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--ink-2); font-size: 15px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--down); flex: none; }
 .dot.warn { background: var(--up); }
 .actions { display: flex; gap: 8px; }
-.icon-btn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel);
+.icon-btn { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel);
   color: var(--ink-2); display: grid; place-items: center; cursor: pointer; }
 .icon-btn:hover { color: var(--ink); }
 .icon-btn svg { width: 20px; height: 20px; }
@@ -51,7 +52,7 @@ button { font: inherit; color: inherit; }
 .menu { position: relative; }
 .menu summary { list-style: none; }
 .menu summary::-webkit-details-marker { display: none; }
-.menu-pop { position: absolute; right: 0; top: 52px; z-index: 5; min-width: 160px; padding: 8px;
+.menu-pop { position: absolute; right: 0; top: 56px; z-index: 5; min-width: 160px; padding: 8px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 32px rgba(22,21,19,0.14); }
 .menu-pop a { display: block; padding: 12px; border-radius: 10px; color: var(--ink); }
 .menu-pop a:hover { background: var(--inset); }
@@ -59,24 +60,26 @@ button { font: inherit; color: inherit; }
 
 /* ---------- level 1: the trip list ---------- */
 .list { margin-top: 32px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.row { display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; gap: 4px 16px; align-items: center; width: 100%;
-  padding: 20px 24px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; cursor: pointer; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; gap: 4px 16px; align-items: center;
+  padding: 20px 24px; border-top: 1px solid var(--line); color: var(--ink); }
 .row:first-child { border-top: 0; }
 .row:hover { background: var(--inset); }
+.row:focus-visible { outline-offset: -3px; border-radius: var(--radius); }
 .row .route { font-family: var(--mono); font-size: 13px; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 600; }
 .row .city { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; margin-top: 2px; }
 .row .when { font-size: 15px; color: var(--ink-2); margin-top: 2px; }
 .row .right { text-align: right; }
 .row .price { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 .row .chev { color: var(--ink-3); }
+.row .chev svg { width: 16px; height: 16px; display: block; }
 .tag { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--navy-wash); color: var(--navy); letter-spacing: 0; }
 .word { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 650; margin-top: 4px; white-space: nowrap; }
 .word::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .w-book { color: var(--down); } .w-fair { color: var(--amber); } .w-wait { color: var(--up); } .w-none { color: var(--ink-3); }
 
 /* ---------- level 2: one trip ---------- */
-.back { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 16px -8px; padding: 8px; border: 0; background: transparent;
-  color: var(--navy); font-weight: 600; cursor: pointer; border-radius: 12px; }
+.back { display: inline-flex; align-items: center; gap: 4px; min-height: 48px; margin: -8px 0 8px -8px; padding: 0 12px 0 8px;
+  color: var(--navy); font-weight: 600; border-radius: 12px; }
 .back svg { width: 20px; height: 20px; }
 .trip-head .route { font-family: var(--mono); font-size: 14px; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 600;
   display: flex; align-items: center; gap: 8px; }
@@ -95,11 +98,11 @@ button { font: inherit; color: inherit; }
 .p-wait { background: var(--up-bg); color: var(--up); }
 .reason { margin: 12px 0 0; color: var(--ink-2); font-size: 15px; }
 
-.seg { display: flex; background: var(--inset); border-radius: 12px; padding: 4px; margin: 0 0 20px; }
-.seg button { flex: 1; border: 0; background: transparent; padding: 10px 12px; border-radius: 9px; cursor: pointer;
+.seg { display: flex; background: var(--inset); border-radius: 12px; padding: 4px; margin: 0 0 12px; }
+.seg button { flex: 1; min-height: 44px; border: 0; background: transparent; padding: 8px 12px; border-radius: 9px; cursor: pointer;
   color: var(--ink-2); font-weight: 600; font-size: 15px; }
-.seg button[aria-selected="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(22,21,19,0.16); }
-.seg-note { font-size: 14px; color: var(--ink-2); margin: -8px 0 16px; }
+.seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(22,21,19,0.16); }
+.seg-note { font-size: 14px; color: var(--ink-2); margin: 0 0 16px; }
 
 .board { border-top: 1px solid var(--line); background: var(--inset); padding: 4px 24px; }
 .leg { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 16px 0;
@@ -108,58 +111,58 @@ button { font: inherit; color: inherit; }
 .leg .dir { font-size: 12px; letter-spacing: 0.09em; font-weight: 700; color: var(--ink-3); }
 .leg .times { font-family: var(--mono); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; }
 .leg .times .to { color: var(--ink-3); font-weight: 400; margin: 0 6px; }
-.leg .times sup { font-size: 11px; color: var(--ink-3); }
+.leg .times sup { font-size: 12px; color: var(--ink-3); }
 .leg .date { font-size: 14px; color: var(--ink-2); }
 .leg .meta { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); min-width: 0; }
 .leg .meta .code { font-family: var(--mono); font-weight: 600; color: var(--ink); white-space: nowrap; }
-.leg .meta .rest { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .leg .dur { text-align: right; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
 .logo { width: 24px; height: 24px; border-radius: 6px; flex: none; display: grid; place-items: center; color: #fff; font-size: 10px; font-weight: 700; }
+.book-wrap { padding: 16px 24px 24px; border-top: 1px solid var(--line); }
+.book { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 16px;
+  background: var(--navy); color: #fff; font-weight: 700; font-size: 17px; }
+.book:hover { background: #18304f; }
 
 .section h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
 .section .lead { margin: 4px 0 0; color: var(--ink-2); font-size: 15px; }
 .section .lead b { color: var(--ink); }
 .foot { font-size: 13px; color: var(--ink-3); margin-top: 12px; }
 
-.chart { position: relative; margin-top: 16px; }
+.chart { position: relative; margin-top: 16px; min-height: 200px; }
 .chart svg { display: block; width: 100%; height: 200px; touch-action: pan-y; }
 .chart .grid { stroke: var(--line); }
 .chart .tick { fill: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
 .chart .band { fill: var(--down-bg); }
 .chart .band-label { fill: var(--down); font-size: 12px; font-weight: 600; }
 .chart .cross { stroke: var(--ink-3); stroke-dasharray: 3 3; }
-.chart .tick.now { fill: var(--navy); font-weight: 700; font-size: 13px; }
 .tip { position: absolute; top: -8px; pointer-events: none; background: var(--ink); color: var(--panel); border-radius: 10px;
   padding: 6px 10px; font-size: 13px; white-space: nowrap; }
 
-.weeks { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; align-items: end; height: 160px; margin-top: 16px; }
+.weeks { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; align-items: end; height: 176px; margin-top: 16px; }
 .wk { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; min-width: 0; }
 .wk .bar { width: 100%; max-width: 44px; border-radius: 6px 6px 3px 3px; background: #cfcac0; }
 .wk.yours .bar { background: var(--navy); }
-.wk.cheap .bar { background: #9cc9ad; }
-.wk .val { font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.wk.yours .val { color: var(--navy); font-weight: 700; }
-.wk .lbl { font-size: 11px; color: var(--ink-3); white-space: nowrap; text-align: center; line-height: 1.25; }
+.wk.cheap .bar { background: var(--down); }
+.wk .val { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wk.yours .val { color: var(--navy); }
+.wk.cheap .val { color: var(--down); }
+.wk .lbl { font-size: 12px; color: var(--ink-3); white-space: nowrap; text-align: center; line-height: 1.2; }
 .wk.yours .lbl { color: var(--ink); font-weight: 700; }
+.wk.cheap .lbl { color: var(--down); font-weight: 600; }
 
-.disclose { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 16px; padding: 14px 0 0;
-  border: 0; border-top: 1px solid var(--line); background: transparent; cursor: pointer; font-weight: 600; text-align: left; }
+.disclose { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 48px; margin-top: 16px;
+  padding: 0; border: 0; border-top: 1px solid var(--line); background: transparent; cursor: pointer; font-weight: 600; text-align: left; }
 .disclose svg { width: 20px; height: 20px; color: var(--ink-3); transition: transform 0.2s; }
 .disclose[aria-expanded="true"] svg { transform: rotate(180deg); }
-.grid3 { display: grid; grid-template-columns: 84px repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
-.grid3 .hd { font-size: 12px; color: var(--ink-3); font-weight: 600; text-align: center; padding: 4px 0; }
-.grid3 .rh { font-size: 12px; color: var(--ink-3); font-weight: 600; display: flex; align-items: center; }
-.cell { border-radius: 12px; background: var(--inset); padding: 10px 4px; text-align: center; font-size: 15px; font-weight: 650;
+table.near { width: calc(100% + 12px); border-collapse: separate; border-spacing: 6px; margin: 4px -6px 0; table-layout: fixed; }
+table.near th { font-size: 12px; color: var(--ink-3); font-weight: 600; padding: 4px 0; }
+table.near thead th { text-align: center; }
+table.near thead th:first-child, table.near tbody th { text-align: left; width: 80px; }
+table.near td { border-radius: 12px; background: var(--inset); padding: 12px 4px; text-align: center; font-size: 14px; font-weight: 650;
   font-variant-numeric: tabular-nums; border: 2px solid transparent; }
-.cell small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3); }
-.cell.yours { border-color: var(--navy); background: var(--panel); }
-.cell.save { background: var(--down-bg); color: var(--down); }
-.cell.save small { color: var(--down); }
-.cell.na { color: var(--ink-3); font-weight: 400; }
-
-.book { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 24px; padding: 16px; border-radius: 16px;
-  background: var(--navy); color: #fff; font-weight: 700; font-size: 17px; }
-.book:hover { background: #18304f; }
+table.near td small { display: block; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+table.near td.yours { border-color: var(--navy); background: var(--panel); }
+table.near td.save { background: var(--down-bg); color: var(--down); }
+table.near td.na { color: var(--ink-3); font-weight: 400; }
 
 footer { margin-top: 40px; text-align: center; color: var(--ink-3); font-size: 13px; }
 .empty { text-align: center; padding: 48px 16px; color: var(--ink-2); }
@@ -174,13 +177,14 @@ table.data td, table.data th { padding: 6px 8px; border-bottom: 1px solid var(--
   .row .price { font-size: 20px; }
   .pad { padding: 20px 16px; }
   .board { padding: 4px 16px; }
+  .book-wrap { padding: 16px; }
   .trip-head h1 { font-size: 32px; }
   .price-block .big { font-size: 42px; }
   .leg .times { font-size: 18px; }
-  .weeks { gap: 3px; height: 150px; }
-  .wk .val, .wk .lbl { font-size: 9.5px; }
-  .grid3 { grid-template-columns: 64px repeat(3, minmax(0, 1fr)); gap: 4px; }
-  .cell { font-size: 14px; padding: 8px 2px; }
+  .weeks { gap: 4px; }
+  table.near { width: calc(100% + 8px); border-spacing: 4px; margin: 4px -4px 0; }
+  table.near thead th:first-child, table.near tbody th { width: 58px; }
+  table.near td { font-size: 13px; padding: 10px 2px; }
 }
 </style>
 </head>
@@ -195,7 +199,7 @@ table.data td, table.data th { padding: 6px 8px; border-bottom: 1px solid var(--
 "use strict";
 document.documentElement.classList.add("js");
 const D = JSON.parse(document.getElementById("data").textContent) || {watches: [], trips: []};
-const TZ = "Asia/Kolkata", MIN = 60000, HOUR = 60 * MIN, DAY = 24 * HOUR;
+const TZ = "Asia/Kolkata", MIN = 60000, DAY = 24 * 60 * MIN;
 const nf = new Intl.NumberFormat("en-IN", {maximumFractionDigits: 0});
 const inr = v => v == null ? "–" : "₹" + nf.format(Math.round(v));
 const inrK = v => "₹" + (Math.round(v / 100) / 10) + "k";
@@ -203,8 +207,8 @@ const t = s => s ? Date.parse(s) : NaN;
 const dOnly = s => { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
 const fmt = o => new Intl.DateTimeFormat("en-GB", Object.assign({timeZone: "UTC"}, o));
 const fDM = fmt({day: "numeric", month: "short"}), fWDM = fmt({weekday: "short", day: "numeric", month: "short"});
-const fW = fmt({weekday: "short"});
-const fIST = new Intl.DateTimeFormat("en-GB", {timeZone: TZ, day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true});
+const fW = fmt({weekday: "short"}), fD = fmt({day: "numeric"}), fM = fmt({month: "short"});
+const fTime = new Intl.DateTimeFormat("en-GB", {timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true});
 const AIR = Object.assign({}, D.airlines || {}, {"6E": "IndiGo", QP: "Akasa Air", IX: "Air India Express", AI: "Air India",
   SQ: "Singapore Airlines", TR: "Scoot"});
 const LOGO = {"6E": "#1b2a8a", QP: "#e8541a", IX: "#c8441a", AI: "#a8121b", SQ: "#1c2d5a", TR: "#b38900",
@@ -214,6 +218,7 @@ const CITY = {SIN: "Singapore", HKT: "Phuket", BLR: "Bengaluru", DEL: "Delhi", B
 const city = c => CITY[c] || c;
 const code = f => f.split(" ")[0];
 const WORD = {book: ["w-book", "Book now"], fair: ["w-fair", "Fair"], wait: ["w-wait", "Wait"]};
+const PILL = {book: "p-book", fair: "p-fair", wait: "p-wait"};
 
 function h(tag, attrs, ...kids) {  // text always goes in as text nodes, never HTML
   const el = document.createElement(tag);
@@ -244,9 +249,18 @@ const hm = iso => iso.slice(11, 16);
 const dur = m => Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m";
 const median = a => { const b = [...a].sort((x, y) => x - y), n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : null; };
 const significant = (save, base) => save >= Math.max(1000, base * 0.05);
-function logo(f) { const c = code(f); return h("span", {class: "logo", style: `background:${LOGO[c] || "#807c75"}`, "aria-hidden": "true"}, c); }
-function dateRange(a, b) { return b ? `${fW.format(dOnly(a))} ${fDM.format(dOnly(a))} – ${fW.format(dOnly(b))} ${fDM.format(dOnly(b))}` : fWDM.format(dOnly(a)); }
-function routeText(w) { return `${w.from} ${w.return ? "⇄" : "→"} ${w.to}`; }
+function logo(f) { const c = code(f); return h("span", {class: "logo", style: `background:${LOGO[c] || "#67635c"}`, "aria-hidden": "true"}, c); }
+function dateRange(a, b) {  // "Fri 22 – Tue 26 Jan" when both dates share a month
+  const A = dOnly(a);
+  if (!b) return fWDM.format(A);
+  const B = dOnly(b);
+  return A.getUTCMonth() === B.getUTCMonth() ? `${fW.format(A)} ${fD.format(A)} – ${fW.format(B)} ${fDM.format(B)}`
+    : `${fWDM.format(A)} – ${fWDM.format(B)}`;
+}
+function routeText(w) {
+  return [w.from + " ", h("span", {"aria-hidden": "true"}, w.return ? "⇄" : "→"),
+    h("span", {class: "sr"}, w.return ? "to and from" : "to"), " " + w.to];
+}
 function daysText(n) { return n > 1 ? `in ${n} days` : n === 1 ? "tomorrow" : n === 0 ? "today" : "departed"; }
 
 // The flights to show for a trip: "cheapest" is what is tracked and alerted on;
@@ -259,18 +273,30 @@ function yourPick(w) {
   return w.choices.filter(c => c.flights[i] === pref).sort((a, b) => a.price - b.price)[0] || null;
 }
 
-// ---------------- level 1: the trip list ----------------
-function greeting() {
-  const hr = Number(new Intl.DateTimeFormat("en-GB", {timeZone: TZ, hour: "numeric", hour12: false}).format(new Date()));
-  const part = hr < 5 ? "evening" : hr < 12 ? "morning" : hr < 17 ? "afternoon" : "evening";
-  return `Good ${part}${D.owner ? ", " + D.owner : ""}`;
-}
+// ---------------- status (top of the list) ----------------
 function statusLine() {
-  const last = t(D.updated_at);
-  if (D.failed_runs > 0) return [true, `Google isn't answering right now · showing prices from ${last ? ago(last) : "earlier"}`];
+  const last = t(D.updated_at), G = D.google_status || {};
+  if (G.refused_runs > 0) {
+    const since = t(G.last_answer_at) || last, next = t(G.pause_until);
+    return [true, `Google isn't answering · prices from ${since ? ago(since) : "earlier"}` +
+      (next && next > Date.now() ? ` · next try ${fTime.format(new Date(next))}` : " · retrying")];
+  }
   if (!last) return [false, "Waiting for the first price check"];
   const stale = Date.now() - last > 3 * (D.check_every_minutes || 30) * MIN;
   return [stale, stale ? `Prices from ${ago(last)} · checks seem to have stopped` : `Prices checked ${ago(last)}`];
+}
+function refreshStatus() {  // once a minute: only the status text changes, nothing else is rebuilt
+  const el = document.getElementById("status-text"), dot = document.getElementById("status-dot");
+  if (!el || document.querySelector(".spin")) return;
+  const [warn, text] = statusLine();
+  el.textContent = text; dot.className = "dot" + (warn ? " warn" : "");
+}
+
+// ---------------- level 1: the trip list ----------------
+function greeting() {
+  const hr = Number(new Intl.DateTimeFormat("en-GB", {timeZone: TZ, hour: "numeric", hourCycle: "h23"}).format(new Date()));
+  const part = hr >= 5 && hr < 12 ? "morning" : hr >= 12 && hr < 17 ? "afternoon" : "evening";
+  return `Good ${part}${D.owner ? ", " + D.owner : ""}`;
 }
 function actions() {
   if (!D.web) return null;
@@ -282,31 +308,28 @@ function actions() {
     h("details", {class: "menu"}, h("summary", {class: "icon-btn", "aria-label": "More", title: "More"}, icon(I_MORE)),
       h("div", {class: "menu-pop"}, h("a", {href: D.web.setup}, "Setup"), h("a", {href: D.web.logout}, "Log out"))));
 }
-function header(title, small) {
-  const [warn, text] = statusLine();
-  return [h("header", {class: "top"},
-      h("div", null, h("div", {class: "caps"}, small), h("h1", null, title),
-        h("div", {class: "status"}, h("span", {class: "dot" + (warn ? " warn" : "")}), h("span", {id: "status-text"}, text))),
-      actions()),
-    (D.web && D.web.notice) || D.demo ? h("div", {class: "notice"}, (D.web && D.web.notice) || "Preview with made-up price history.") : null];
-}
 function listView() {
+  const [warn, text] = statusLine();
   const ws = [...(D.watches || [])].sort((a, b) => a.depart < b.depart ? -1 : a.depart > b.depart ? 1 : 0);
   const rows = ws.map(w => {
     const st = w.state || {}, a = w.advice;
     const [cls, word] = st.misses ? ["w-wait", "Not found"] : a ? WORD[a.verdict] : ["w-none", st.last == null ? "Checking…" : ""];
-    return h("button", {class: "row", type: "button", onclick: () => go(w.id),
-        "aria-label": `${city(w.to)}${w.who ? " for " + w.who : ""}, ${dateRange(w.depart, w.return)}, ${st.last != null ? inr(st.last) : "no price yet"}${word ? ", " + word : ""}`},
+    return h("a", {class: "row", href: "#/trip/" + encodeURIComponent(w.id)},
       h("div", null,
         h("div", {class: "route"}, routeText(w)),
         h("div", {class: "city"}, city(w.to), w.who ? h("span", {class: "tag"}, w.who) : null),
-        h("div", {class: "when"}, `${dateRange(w.depart, w.return)} · ${daysText(daysUntil(w.depart))}`)),
+        h("div", {class: "when"}, `${dateRange(w.depart, w.return)} · `, h("span", {style: "white-space:nowrap"}, daysText(daysUntil(w.depart))))),
       h("div", {class: "right"},
         h("div", {class: "price num"}, st.last != null ? inr(st.last) : "—"),
         word ? h("div", {class: "word " + cls}, word) : null),
       h("span", {class: "chev"}, icon(I_CHEV_R)));
   });
-  return h("div", {class: "view"}, header(greeting(), "Your flights"),
+  return h("div", {class: "view"},
+    h("header", {class: "top"},
+      h("div", null, h("h1", {tabindex: "-1"}, greeting()),
+        h("div", {class: "status"}, h("span", {class: "dot" + (warn ? " warn" : ""), id: "status-dot"}), h("span", {id: "status-text"}, text))),
+      actions()),
+    (D.web && D.web.notice) || D.demo ? h("div", {class: "notice"}, (D.web && D.web.notice) || "Preview with made-up price history.") : null,
     rows.length ? h("nav", {class: "list", "aria-label": "Trips"}, rows) : h("div", {class: "empty"}, "No flights tracked yet."));
 }
 
@@ -317,42 +340,49 @@ function legRow(dir, leg) {
   return h("div", {class: "leg"},
     h("div", {class: "dir"}, dir),
     h("div", null, h("div", {class: "date"}, fWDM.format(dOnly(leg.dep.slice(0, 10)))),
-      h("div", {class: "times"}, hm(leg.dep), h("span", {class: "to"}, "→"), hm(leg.arr), next ? h("sup", null, "+1") : null)),
-    h("div", {class: "dur"}, dur(leg.minutes), h("br"), "Direct"),
-    h("div", {class: "meta"}, logo(leg.flight), h("span", {class: "code"}, leg.flight),
-      h("span", {class: "rest"}, `${AIR[c] || c} · ${leg.from} → ${leg.to}`)));
+      h("div", {class: "times"}, hm(leg.dep), h("span", {class: "to", "aria-label": "to"}, "→"), hm(leg.arr),
+        next ? h("sup", {"aria-label": "next day"}, "+1") : null)),
+    h("div", {class: "dur"}, dur(leg.minutes)),
+    h("div", {class: "meta"}, logo(leg.flight), h("span", {class: "code"}, leg.flight), h("span", null, AIR[c] || c)));
 }
 function board(option) {
   const legs = (option && option.legs) || [];
   if (!legs.length) return h("div", {class: "board"}, h("div", {class: "leg"}, h("div", {class: "dir"}, ""), h("div", {class: "date"}, "Flight times appear after the first check.")));
   return h("div", {class: "board"}, legs.map((l, i) => legRow(i === 0 ? "OUT" : "BACK", l)));
 }
-function priceBlock(w, which) {
+function pricePanel(w, which) {
   const st = w.state || {}, a = w.advice;
   const pick = yourPick(w);
-  const price = which === "pick" && pick ? pick.price : st.last;
-  const option = which === "pick" && pick ? pick : w.current;
-  const [pcls] = a ? {book: ["p-book"], fair: ["p-fair"], wait: ["p-wait"]}[a.verdict] : [""];
+  const hasSwitch = pick && w.current && pick.price !== w.current.price;
+  if (!hasSwitch) which = "cheapest";
+  const price = which === "pick" ? pick.price : st.last;
+  const option = which === "pick" ? pick : w.current;
   const block = h("div", {class: "pad price-block"});
-  if (pick && w.current && pick.price !== w.current.price) {
-    const seg = h("div", {class: "seg", role: "tablist", "aria-label": "Which flights"},
-      [["pick", "Your pick"], ["cheapest", "Cheapest"]].map(([k, label]) => h("button", {type: "button", role: "tab",
-        "aria-selected": String(k === which), onclick: () => { state.which[w.id] = k; render(); }}, label)));
-    block.append(seg);
-    const diff = pick.price - w.current.price;
-    block.append(h("div", {class: "seg-note"}, which === "pick"
-      ? `Your preferred ${w.flights[preferredIndex(w)].split("|")[0]} · ${inr(diff)} more than the cheapest`
-      : `The cheapest acceptable flights · ${inr(diff)} less than your pick`));
+  if (hasSwitch) {
+    const pref = w.flights[preferredIndex(w)].split("|")[0], diff = pick.price - w.current.price;
+    block.append(
+      h("div", {class: "seg", role: "group", "aria-label": "Which flights to show"},
+        [["pick", "Your pick"], ["cheapest", "Cheapest"]].map(([k, label]) => h("button", {type: "button", "data-k": k,
+          "aria-pressed": String(k === which), onclick: () => { if (k !== which) { state.which[w.id] = k; render(k); } }}, label))),
+      h("p", {class: "seg-note"}, which === "pick"
+        ? `With your ${pref} · ${inr(diff)} more than the cheapest (${inr(w.current.price)})`
+        : `Cheapest acceptable flights · ${inr(diff)} less than with your ${pref}`));
   }
+  const checked = w.checked_at || D.updated_at;
   block.append(...[
     h("div", {class: "big num"}, price != null ? inr(price) : "—"),
-    h("div", {class: "sub"}, `${w.return ? "Round trip" : "One way"} · 1 adult · ${(w.checked_at || D.updated_at) ? "checked " + ago(t(w.checked_at || D.updated_at)) : "not checked yet"}`),
+    h("div", {class: "sub"}, `${w.return ? "Round trip" : "One way"}${checked ? " · checked " + ago(t(checked)) : ""}`),
     st.misses ? h("div", {class: "pill p-wait"}, "Not found on the last check") : null,
-    a ? h("div", {class: "pill " + pcls}, a.title) : null,
+    a ? h("div", {class: "pill " + PILL[a.verdict]}, a.title) : null,
     a ? h("p", {class: "reason"}, a.summary) : null,
-    w.target ? h("p", {class: "reason"}, `You'll get a Telegram alert if it reaches ${inr(w.target)}.`) : null].filter(Boolean));
-  return [block, board(option)];
+    w.target && st.last != null && st.last > w.target ? h("p", {class: "reason"}, `Telegram alert when it drops to ${inr(w.target)}.`) : null,
+  ].filter(Boolean));
+  return [block, board(option),
+    h("div", {class: "book-wrap"}, h("a", {class: "book", href: w.link, target: "_blank", rel: "noopener noreferrer"},
+      "Book on Google Flights", h("span", {class: "sr"}, " (opens in a new tab)")))];
 }
+
+let chartObserver = null;  // one at a time; disconnected whenever the page is rebuilt
 function historyChart(w) {
   const g = w.google;
   const pts = g && (g.history || []).length ? g.history.map(([d, p]) => [dOnly(d).getTime(), p])
@@ -360,18 +390,22 @@ function historyChart(w) {
   if (pts.length < 2) return null;
   const wrap = h("div", {class: "chart"});
   const tip = h("div", {class: "tip", hidden: true}); wrap.append(tip);
+  let lastW = 0;
   const draw = () => {
+    const W = wrap.clientWidth;
+    if (!W || W === lastW) return;
+    lastW = W;
     const old = wrap.querySelector("svg"); if (old) old.remove();
-    const W = wrap.clientWidth || 600, H = 200, ml = 46, mr = 8, mt = 16, mb = 24;
+    const H = 200, ml = 46, mr = 8, mt = 16, mb = 24;
     const x0 = pts[0][0], x1 = Math.max(pts[pts.length - 1][0], x0 + DAY);
     let lo = Math.min(...pts.map(p => p[1]), g ? g.low : Infinity), hi = Math.max(...pts.map(p => p[1]), g ? g.high : 0);
-    const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+    const pad = (hi - lo) * 0.08 || 500; lo -= pad; hi += pad;
     const X = x => ml + (x - x0) / (x1 - x0) * (W - ml - mr), Y = v => mt + (1 - (v - lo) / (hi - lo)) * (H - mt - mb);
     const svg = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img",
-      "aria-label": `Price over the last ${pts.length} days: from ${inr(pts[0][1])} to ${inr(pts[pts.length - 1][1])}` + (g ? `; typical ${inr(g.low)} to ${inr(g.high)}` : "")});
+      "aria-label": `Price over the last ${pts.length} days: from ${inr(pts[0][1])} to ${inr(pts[pts.length - 1][1])}` + (g ? `; usually ${inr(g.low)} to ${inr(g.high)}` : "")});
     if (g) {
       svg.append(s("rect", {x: ml, width: W - ml - mr, y: Y(g.high), height: Y(g.low) - Y(g.high), class: "band"}),
-        s("text", {x: W - mr - 6, y: Y(g.low) - 6, "text-anchor": "end", class: "band-label"}, "Typical price range"));
+        s("text", {x: W - mr - 6, y: Y(g.low) - 6, "text-anchor": "end", class: "band-label"}, "Usual price range"));
       for (const v of [g.low, g.high]) svg.append(s("text", {x: ml - 6, y: Y(v) + 4, "text-anchor": "end", class: "tick"}, inrK(v)));
     } else for (const v of [Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[1]))])
       svg.append(s("line", {x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), class: "grid"}), s("text", {x: ml - 6, y: Y(v) + 4, "text-anchor": "end", class: "tick"}, inrK(v)));
@@ -379,7 +413,6 @@ function historyChart(w) {
     const last = pts[pts.length - 1];
     svg.append(s("path", {d, fill: "none", stroke: "var(--navy)", "stroke-width": 2.5, "stroke-linejoin": "round"}),
       s("circle", {cx: X(last[0]), cy: Y(last[1]), r: 5, fill: "var(--navy)", stroke: "var(--panel)", "stroke-width": 2}),
-      s("text", {x: X(last[0]) - 10, y: Y(last[1]) - 10, "text-anchor": "end", class: "tick now"}, inr(last[1])),
       s("text", {x: ml, y: H - 4, class: "tick"}, fDM.format(new Date(x0))),
       s("text", {x: W - mr, y: H - 4, "text-anchor": "end", class: "tick"}, "Today"));
     const cross = s("line", {y1: mt, y2: H - mb, class: "cross", visibility: "hidden"});
@@ -399,13 +432,13 @@ function historyChart(w) {
     svg.addEventListener("pointerleave", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
     wrap.prepend(svg);
   };
-  requestAnimationFrame(draw);
-  new ResizeObserver(() => { if (wrap.isConnected) draw(); }).observe(wrap);
+  chartObserver = new ResizeObserver(draw);
+  chartObserver.observe(wrap);
   return h("section", {class: "panel pad section"}, h("h2", null, "Price over the last 60 days"),
-    h("p", {class: "lead"}, g ? `Cheapest direct round trip for your dates. Green is what this trip usually costs (${inr(g.low)}–${inr(g.high)}).`
-      : "Your tracked flights, since tracking began."), wrap);
+    h("p", {class: "lead"}, g ? "Cheapest direct round trip for your dates, on any airline." : "Your tracked flights, since tracking began."), wrap);
 }
-function howMuchMore(w) {
+
+function otherWeeks(w) {
   const ins = w.insights;
   if (!ins || !(ins.similar || []).length || ins.yours == null) return null;
   const others = ins.similar.filter(x => x.depart !== w.depart).map(x => x.price);
@@ -414,79 +447,87 @@ function howMuchMore(w) {
   const extra = ins.yours - typical, pct = Math.round(extra / typical * 100);
   const name = w.return ? `${fW.format(dOnly(w.depart))}–${fW.format(dOnly(w.return))}` : fW.format(dOnly(w.depart));
   const lead = Math.abs(pct) < 5 ? [`About what a ${name} trip usually costs (`, h("b", {class: "num"}, inr(typical)), ").`"]
-    : extra > 0 ? ["You're paying ", h("b", {class: "num"}, `${inr(extra)} (${pct}%) more`), ` than a typical ${name} trip (${inr(typical)}).`]
-    : ["You're paying ", h("b", {class: "num"}, `${inr(-extra)} (${-pct}%) less`), ` than a typical ${name} trip (${inr(typical)}).`];
+    : extra > 0 ? ["You're paying ", h("b", {class: "num"}, `${inr(extra)} (${pct}%) more`), ` than for a typical ${name} trip (${inr(typical)}).`]
+    : ["You're paying ", h("b", {class: "num"}, `${inr(-extra)} (${-pct}%) less`), ` than for a typical ${name} trip (${inr(typical)}).`];
   const list = ins.similar, hi = Math.max(...list.map(x => x.price)), lo = Math.min(...list.map(x => x.price));
+  const cheapest = list.find(x => x.price === lo && x.depart !== w.depart);
   const bars = h("div", {class: "weeks", role: "img", "aria-label": list.map(x => `${fDM.format(dOnly(x.depart))}: ${inr(x.price)}`).join(", ")},
     list.map(x => {
-      const mine = x.depart === w.depart;
-      const pctH = 18 + 82 * (x.price - lo * 0.85) / (hi - lo * 0.85);
-      return h("div", {class: "wk" + (mine ? " yours" : x.price === lo ? " cheap" : "")},
-        h("div", {class: "val"}, inrK(x.price)), h("div", {class: "bar", style: `height:${Math.max(6, Math.min(100, pctH))}%`}),
-        h("div", {class: "lbl"}, fDM.format(dOnly(x.depart)), mine ? h("br") : null, mine ? "yours" : null));
+      const mine = x.depart === w.depart, cheap = x === cheapest;
+      return h("div", {class: "wk" + (mine ? " yours" : cheap ? " cheap" : "")},
+        mine || cheap ? h("div", {class: "val"}, inrK(x.price)) : null,
+        h("div", {class: "bar", style: `height:${Math.max(4, x.price / hi * 100)}%`}),
+        h("div", {class: "lbl"}, fD.format(dOnly(x.depart)), h("br"), mine ? "yours" : cheap ? "lowest" : fM.format(dOnly(x.depart))));
     }));
-  // a day earlier or later, behind a tap
-  const near = ins.nearby || [];
+  // a day earlier or later, behind a tap (stays open while you switch flights)
   let more = null;
-  if (near.length) {
-    const body = h("div", {hidden: true});
-    let built = false;
-    const btn = h("button", {class: "disclose", type: "button", "aria-expanded": "false", onclick: () => {
-      const open = btn.getAttribute("aria-expanded") !== "true";
-      btn.setAttribute("aria-expanded", String(open)); body.hidden = !open;
-      if (open && !built) { built = true; body.append(nearbyGrid(w, ins)); }
+  if ((ins.nearby || []).length) {
+    const open = !!state.open[w.id];
+    const body = h("div", {hidden: !open}, open ? nearbyTable(w, ins) : null);
+    const btn = h("button", {class: "disclose", type: "button", "aria-expanded": String(open), onclick: () => {
+      const now = btn.getAttribute("aria-expanded") !== "true";
+      state.open[w.id] = now; btn.setAttribute("aria-expanded", String(now)); body.hidden = !now;
+      if (now && !body.firstChild) body.append(nearbyTable(w, ins));
     }}, "A day earlier or later", icon(I_CHEV_D));
     more = [btn, body];
   }
-  return h("section", {class: "panel pad section"}, h("h2", null, "How much more you're paying"), h("p", {class: "lead"}, lead),
-    bars, h("p", {class: "foot"}, `The same ${name} trip in other weeks within a month of yours · cheapest direct round trip on any airline.`), more);
+  return h("section", {class: "panel pad section"}, h("h2", null, "Same trip, other weeks"), h("p", {class: "lead"}, lead),
+    bars, h("p", {class: "foot"}, `The same ${name} trip within a month of yours · cheapest direct round trip on any airline.`), more);
 }
-function nearbyGrid(w, ins) {
+function nearbyTable(w, ins) {
   const near = ins.nearby, yours = ins.yours;
   const deps = [...new Set(near.map(x => x.depart))].sort();
   const rets = [...new Set(near.map(x => x.return).filter(Boolean))].sort();
   const find = (d, r) => near.find(x => x.depart === d && (x.return || null) === (r || null));
   const cell = (d, r) => {
     const x = find(d, r), mine = d === w.depart && (r || null) === (w.return || null);
-    if (!x || x.price == null) return h("div", {class: "cell na"}, "—");
-    const save = yours - x.price;
-    return h("div", {class: "cell" + (mine ? " yours" : significant(save, yours) ? " save" : "")}, inrK(x.price),
-      h("small", null, mine ? "your dates" : save > 0 ? `save ${inrK(save)}` : save < 0 ? `+${inrK(-save)}` : "same"));
+    if (!x || x.price == null) return h("td", {class: "na"}, "—");
+    if (mine) return h("td", {class: "yours"}, inr(x.price), h("small", null, "your dates"));
+    const diff = x.price - yours;
+    return h("td", {class: significant(-diff, yours) ? "save" : null},
+      diff < 0 ? `save ${inr(-diff)}` : diff > 0 ? `+${inr(diff)}` : "same", h("small", null, inr(x.price)));
   };
-  if (!rets.length) return h("div", {class: "grid3", style: "grid-template-columns: repeat(3, minmax(0,1fr))"},
-    deps.map(d => h("div", {class: "hd"}, fWDM.format(dOnly(d)))), deps.map(d => cell(d, null)));
-  return h("div", {class: "grid3"}, h("div", {class: "hd", style: "text-align:left"}, "Leave / back"),
-    rets.map(r => h("div", {class: "hd"}, fWDM.format(dOnly(r)))),
-    deps.map(d => [h("div", {class: "rh"}, fWDM.format(dOnly(d))), rets.map(r => cell(d, r))]));
+  const cols = rets.length ? rets : [null];
+  return h("table", {class: "near"},
+    h("caption", {class: "sr"}, "Price difference if you leave or come back a day earlier or later"),
+    h("thead", null, h("tr", null, h("th", {scope: "col"}, h("span", {"aria-hidden": "true"}, rets.length ? "Out ↓ Back →" : "")),
+      cols.map(r => h("th", {scope: "col"}, r ? fWDM.format(dOnly(r)) : "Price")))),
+    h("tbody", null, deps.map(d => h("tr", null, h("th", {scope: "row"}, fWDM.format(dOnly(d))), cols.map(r => cell(d, r))))));
 }
 function tripView(w) {
-  const which = state.which[w.id] || "cheapest";
-  const days = daysUntil(w.depart);
   return h("div", {class: "view"},
-    h("button", {class: "back", type: "button", onclick: () => history.length > 1 && location.hash ? history.back() : go(null)}, icon(I_CHEV_L), "All flights"),
+    h("a", {class: "back", href: "#"}, icon(I_CHEV_L), "All flights"),
     h("div", {class: "trip-head"},
       h("div", {class: "route"}, routeText(w), w.who ? h("span", {class: "tag"}, w.who) : null),
-      h("h1", null, city(w.to)),
-      h("div", {class: "when"}, `${dateRange(w.depart, w.return)} · ${daysText(days)}`)),
-    h("section", {class: "panel"}, priceBlock(w, which)),
+      h("h1", {tabindex: "-1"}, city(w.to)),
+      h("div", {class: "when"}, `${dateRange(w.depart, w.return)} · ${daysText(daysUntil(w.depart))}`)),
+    h("section", {class: "panel"}, pricePanel(w, state.which[w.id] || "cheapest")),
     historyChart(w),
-    howMuchMore(w),
-    h("a", {class: "book", href: w.link, target: "_blank", rel: "noopener noreferrer"}, "Book on Google Flights ↗"));
+    otherWeeks(w));
 }
 
-// ---------------- navigation ----------------
-const state = {which: {}};
-function current() { const m = location.hash.match(/^#\/trip\/(.+)$/); return m ? D.watches.find(w => w.id === decodeURIComponent(m[1])) : null; }
-function go(id) { if (id) location.hash = "#/trip/" + encodeURIComponent(id); else history.pushState(null, "", location.pathname + location.search); render(); }
-function render() {
-  const w = current();
+// ---------------- navigation: #/trip/<id>; anything else is the list ----------------
+const state = {which: {}, open: {}};
+function current() { const m = location.hash.match(/^#\/trip\/(.+)$/); return m ? (D.watches || []).find(w => w.id === decodeURIComponent(m[1])) : null; }
+function render(switched) {
+  if (chartObserver) { chartObserver.disconnect(); chartObserver = null; }
+  const y = window.scrollY, w = current();
   document.getElementById("app").replaceChildren(w ? tripView(w) : listView());
   document.title = w ? `${city(w.to)} · Flight Prices` : "Flight Prices";
+  if (switched) {  // switching flights keeps your place and focus
+    window.scrollTo(0, y);
+    const b = document.querySelector(`.seg button[data-k="${switched}"]`); if (b) b.focus();
+  }
 }
-window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
-window.addEventListener("popstate", render);
+window.addEventListener("hashchange", () => {
+  render(); window.scrollTo(0, 0);
+  const h1 = document.querySelector("#app h1"); if (h1) h1.focus({preventScroll: true});
+});
 render();
-setInterval(() => { if (!document.querySelector(".spin") && !current()) render(); }, MIN);
+setInterval(refreshStatus, MIN);
+if (D.web && "serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});  // installable app + offline copy
+}
 </script>
 </body>
 </html>

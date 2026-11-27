@@ -197,7 +197,7 @@ class CheckLoop(unittest.TestCase):
             ins.assert_not_called()  # no date comparisons while Google refuses
             g = self.store.load_state()["google"]
             self.assertEqual(g["refused_runs"], 1)
-            self.assertIn("pause_until", g)
+            self.assertIn("pause_until", g["checkers"][tracker.CHECKER])
             r2 = tracker.check(CONFIG, self.store)  # inside the 20-minute pause: nothing searched
             self.assertTrue(r2["paused"])
             self.assertEqual(len(calls), 1)
@@ -208,7 +208,7 @@ class CheckLoop(unittest.TestCase):
         tracker.check(CONFIG, self.store, force=True)  # Google answers again
         g = self.store.load_state()["google"]
         self.assertEqual(g["refused_runs"], 0)
-        self.assertNotIn("pause_until", g)
+        self.assertNotIn("pause_until", g["checkers"][tracker.CHECKER])
         self.assertTrue(g["last_answer_at"])
 
     def test_budget_cut_does_not_count_as_missing(self):
@@ -395,6 +395,23 @@ class WebApp(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b"Telegram alerts", body)
         self.assertIn(b"QStash not connected", body)
+
+    def test_app_files_are_public_and_dashboard_is_installable(self):
+        for path, ctype in (("/manifest.webmanifest", "application/manifest+json"), ("/sw.js", "text/javascript"),
+                            ("/icon-192.png", "image/png"), ("/apple-touch-icon.png", "image/png")):
+            status, headers, body = self.call("GET", path)
+            self.assertEqual(status, 200, path)
+            self.assertTrue(dict(headers)["Content-Type"].startswith(ctype), path)
+            self.assertTrue(body)
+        manifest = json.loads(self.call("GET", "/manifest.webmanifest")[2])
+        self.assertEqual(manifest["display"], "standalone")
+        self.assertEqual({i["sizes"] for i in manifest["icons"]}, {"192x192", "512x512"})
+        _, _, login = self.call("GET", "/")
+        self.assertIn(b'rel="manifest"', login)
+        self.assertIn(b'caches.delete("flight-prices-v1")', login)
+        _, _, dash = self.call("GET", "/", self.login())
+        self.assertIn(b'rel="manifest"', dash)
+        self.assertNotIn(b"<!--__PWA_HEAD__-->", dash)
 
     def test_schedule_request(self):
         sent = {}

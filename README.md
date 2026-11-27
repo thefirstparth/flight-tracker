@@ -36,6 +36,21 @@ Everything runs on free plans with no card: **Vercel** (app and checks),
 **Upstash Redis** (stored prices) and **Upstash QStash** (the 10-minute
 schedule), both added from inside Vercel, plus **Telegram**.
 
+## Install it like an app
+
+The dashboard is an installable web app (it has an app manifest, icons and a
+small service worker, which also keeps the last dashboard for when you are
+offline and forgets it when you log out).
+
+- **iPhone (Safari):** open the address, tap Share → **Add to Home Screen**.
+- **Android (Chrome):** open the address, tap ⋮ → **Install app** (or "Add to
+  Home screen").
+- **Mac or Windows (Chrome or Edge):** open the address and click the install
+  icon at the right of the address bar (or ⋮ → **Install Flight Prices**).
+  On a Mac with Safari: File → **Add to Dock**.
+
+Log in once inside the installed app; it stays logged in for 90 days.
+
 ## Put it live on Vercel (about 15 minutes, once)
 
 1. **Vercel account** (Hobby, free): sign up at vercel.com.
@@ -117,11 +132,12 @@ Rebuild it by hand with `python dashboard.py` (or `python dashboard.py --demo`).
 
 - **Your own computer:** see "Run it on your own computer" below; prices are
   saved in `data/` and the dashboard is written to `dashboard/index.html`.
-- **GitHub Actions (switched off):** `extras/github-actions-track.yml` runs the
-  command-line version every 2 hours if copied to `.github/workflows/`. Never
-  together with the Vercel app (alerts would arrive twice). GitHub's
-  terms say Actions on GitHub's servers should only be used for work related
-  to the repository's software, so this is a fallback, not the recommendation.
+- **GitHub Actions (second checker, on):** `.github/workflows/track.yml` runs
+  the same check from GitHub's servers every 30 minutes, using the Vercel app's
+  storage (four repository secrets: `KV_REST_API_URL`, `KV_REST_API_TOKEN`,
+  `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`). Both share one lock and the same
+  due rules, so nothing is searched or alerted twice; each pauses on its own
+  when Google refuses it. Free for a public repository.
 
 ## Changing what is watched
 

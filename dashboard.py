@@ -147,8 +147,12 @@ def static_summary(data: dict) -> str:
     return "\n".join(parts)
 
 
-def render(data: dict) -> str:
+PWA_MARKER = "<!--__PWA_HEAD__-->"
+
+
+def render(data: dict, extra_head: str = "") -> str:
     html = TEMPLATE.read_text(encoding="utf-8")
+    html = html.replace(PWA_MARKER, extra_head)
     html = html.replace(NOSCRIPT_MARKER, "<noscript>" + static_summary(data) + "</noscript>")
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     # Keep the JSON from ever closing the <script> tag or opening a comment early.

@@ -1,7 +1,13 @@
 # DESIGN.md: Flight price fare board
 
-The dashboard (`dashboard_template.html`) is one page that answers one question
-per trip: **is this a good price to book?** Every change to the page follows
+The dashboard (`dashboard_template.html`) answers one question per trip:
+**is this a good price to book?** It has two levels: the trip list (greeting,
+one row per trip: route, city, who, dates, countdown, price, one-word verdict),
+and a trip's own page (`#/trip/<id>`): price, verdict word and one sentence,
+the "Your pick | Cheapest" switch when a watch has a preferred flight, OUT/BACK
+rows, the Book button, Google's 60-day chart, and "Same trip, other weeks" with
+the day-earlier-or-later table behind a tap. The verdict, chart and comparisons
+always describe the cheapest fare for the dates, and say so. Every change to the page follows
 this file. If a change needs to break a rule, update the rule here first.
 
 ## 1. Feel
@@ -28,7 +34,7 @@ decoration.
 | `--line` | `#dcd8d0` | Hairlines and borders (1px) |
 | `--ink` | `#161513` | Main text and prices |
 | `--ink-2` | `#57544e` | Secondary text |
-| `--ink-3` | `#807c75` | Labels, captions, small caps |
+| `--ink-3` | `#67635c` | Labels, captions (≥ 4.5:1 on every background) |
 | `--navy` / `--navy-wash` | `#1f3a5f` / `#dfe5ec` | The one accent: Book button, "your dates", chart line, tags |
 | `--down` / `--down-bg` | `#12744a` / `#d9ede1` | **Cheaper**: price fell, lowest seen, savings |
 | `--up` / `--up-bg` | `#b3321f` / `#f5ded8` | **Dearer**: price rose, rising fast, warnings |
@@ -107,7 +113,15 @@ Rules:
 - **Buttons:** Book is the only filled button (navy pill). Refresh and the menu
   (Setup, Log out) are round icon buttons.
 
-## 6. Writing
+## 6. App icon and install
+
+- Icon: the airport-signage navy (`#1f3a5f`) square, full bleed, with the
+  Material "flight" plane in `--panel` stone, turned 45° (take-off). Source:
+  `static/icon.svg`; PNGs at 512, 192, 180 (Apple) and 32 (favicon).
+- Installed app: name "Flight Prices", short name "Flights", standalone,
+  background and theme colour `--bg` (`#e7e5e0`).
+
+## 7. Writing
 
 - Plain words, short. "Lowest price we've seen", not "Price index minimum".
 - Every date has its weekday: "Fri 22 Jan".
@@ -115,8 +129,10 @@ Rules:
   tight: ₹43.7k.
 - Say what a comparison is based on: "Cheapest direct round trip on any airline".
 
-## 7. Do and don't
+## 8. Do and don't
 
+- ✅ Touch targets at least 44px (48px for icon buttons, back and disclosure).
+- ✅ Text at least 12px; bars start at zero; only your week and the cheapest week carry a value.
 - ✅ Keep one theme. ✅ Keep every price next to its context.
 - ✅ Say what advice is based on; call it a guide, not a prediction.
 - ✅ Use step lines for price history. ✅ Hide details behind a tap.

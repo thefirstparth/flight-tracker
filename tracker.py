@@ -55,13 +55,21 @@ SEARCH_ATTEMPTS = 3
 RETRY_WAIT_SECONDS = (1, 2)
 BACKOFF_MINUTES = (20, 40, 60)  # pause after 1, 2, 3+ runs in a row with no answer
 _last_problem: str | None = None  # what the last failed request looked like, for logs and status
+_last_response: str | None = None  # the start of Google's last empty answer, for the logs
+# Each place that runs checks (Vercel, GitHub) pauses on its own: Google may
+# refuse one set of servers and answer another.
+CHECKER = os.environ.get("CHECKER") or ("vercel" if os.environ.get("VERCEL") else "local")
 
 
 def _problem(e: Exception | None) -> str:
     """A short description of why Google gave no prices: rate limit, other HTTP error, timeout or empty."""
     global _last_problem
+    global _last_response
     if e is None:
         text = "empty answer (Google refused or returned nothing)"
+        if _last_response:
+            log(f"      Google's answer: {_last_response}")
+            _last_response = None
     else:
         status = getattr(getattr(e, "response", None), "status_code", None)
         msg = str(e)
@@ -365,6 +373,8 @@ def _shopping(client, filters, locale: dict, key: tuple | None = None):
     response.raise_for_status()
     inner = parse_first_wrb_payload(response.text)
     if not inner:
+        global _last_response
+        _last_response = f"HTTP {response.status_code}, {len(response.text)} bytes: {response.text[:100]!r}"
         return None
     rows = [item for i in (2, 3) if len(inner) > i and isinstance(inner[i], list) for item in inner[i][0]]
     flights = []
@@ -878,9 +888,10 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
     now = now_dt.isoformat()
     report = {"checked": 0, "answered": 0, "alerts": 0, "exit_code": 0, "skipped_busy": False, "paused": False}
     gstat = state.setdefault("google", {})
-    pause_until = gstat.get("pause_until")
+    mine = gstat.setdefault("checkers", {}).setdefault(CHECKER, {})
+    pause_until = mine.get("pause_until")
     if pause_until and not force and now_dt < datetime.fromisoformat(pause_until):
-        log(f"Google refused recently ({gstat.get('last_problem', 'no answer')}); "
+        log(f"Google refused {CHECKER} recently ({mine.get('last_problem', 'no answer')}); "
             f"pausing until {pause_until[11:16]} IST. Nothing searched this run.")
         report["paused"] = True
         return report
@@ -936,16 +947,23 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
     report["answered"] = sum(1 for v in results.values() if v)
     if results:
         if report["answered"]:
-            gstat.update({"last_answer_at": now, "refused_runs": 0})
-            gstat.pop("pause_until", None)
+            mine.update({"last_answer_at": now, "refused_runs": 0})
+            mine.pop("pause_until", None)
+            gstat.update({"last_answer_at": now, "refused_runs": 0, "answered_by": CHECKER})
         else:
-            n_refused = gstat.get("refused_runs", 0) + 1
+            n_refused = mine.get("refused_runs", 0) + 1
             wait = BACKOFF_MINUTES[min(n_refused, len(BACKOFF_MINUTES)) - 1]
-            gstat.update({"refused_runs": n_refused, "last_problem": _last_problem or "no answer",
-                          "last_problem_at": now,
-                          "pause_until": (now_dt + timedelta(minutes=wait)).isoformat()})
-            log(f"No answer from Google ({gstat['last_problem']}), {n_refused} run(s) in a row: "
+            mine.update({"refused_runs": n_refused, "last_problem": _last_problem or "no answer",
+                         "last_problem_at": now, "pause_until": (now_dt + timedelta(minutes=wait)).isoformat()})
+            gstat.update({"refused_runs": gstat.get("refused_runs", 0) + 1,
+                          "last_problem": f"{CHECKER}: {mine['last_problem']}", "last_problem_at": now})
+            log(f"No answer from Google for {CHECKER} ({mine['last_problem']}), {n_refused} run(s) in a row: "
                 f"pausing {wait} minutes.")
+        pauses = [c["pause_until"] for c in gstat["checkers"].values() if c.get("pause_until")]
+        if pauses and len(pauses) == len(gstat["checkers"]):
+            gstat["pause_until"] = min(pauses)  # the next time any checker will try
+        else:
+            gstat.pop("pause_until", None)
 
     messages, history_rows, event_rows = [], [], []
     wstate = state.setdefault("watches", {})
@@ -1177,22 +1195,22 @@ def book_or_wait(google: dict | None, comparison: dict | None, depart: str, toda
 
     span = f"{inr(low)}–{inr(high)}"
     if now < low:
-        add(-25, f"{inr(now)} is below Google's typical range for this trip ({span}).")
+        add(-25, f"The cheapest fare for your dates ({inr(now)}) is below Google's typical range for this trip ({span}).")
     elif now > high:
         points = 20 + min(10, (now - high) / high * 50)
         if peak_pct is not None:
-            add(points / 2, f"{inr(now)} is above Google's typical range for this trip ({span}), "
+            add(points / 2, f"The cheapest fare for your dates ({inr(now)}) is above Google's typical range for this trip ({span}), "
                             "largely because of the peak dates.")
         elif season_high:
-            add(points / 2, f"{inr(now)} is above Google's typical range for this trip ({span}), but so are "
+            add(points / 2, f"The cheapest fare for your dates ({inr(now)}) is above Google's typical range for this trip ({span}), but so are "
                             f"most weeks around it (typical {inr(typical_week)}): the whole season costs more "
                             "than usual right now.")
         else:
-            add(points, f"{inr(now)} is above Google's typical range for this trip ({span}).")
+            add(points, f"The cheapest fare for your dates ({inr(now)}) is above Google's typical range for this trip ({span}).")
     else:
         pos = (now - low) / (high - low) if high > low else 0.5
         part = "lower" if pos < 0.34 else "middle" if pos < 0.67 else "upper"
-        add((pos - 0.5) * 30, f"{inr(now)} is in the {part} part of Google's typical range ({span}).")
+        add((pos - 0.5) * 30, f"The cheapest fare for your dates ({inr(now)}) is in the {part} part of Google's typical range ({span}).")
 
     hist = [price for _, price in google.get("history") or []]
     if len(hist) >= 14:
@@ -1279,8 +1297,15 @@ def run(args) -> int:
         ok = send("✈️ Test message from your flight tracker. Price alerts will arrive here.", False)
         return 0 if ok else 1
     store = open_store(Path(args.data_dir))
-    report = check(Path(args.config), store, summary=args.summary, force=args.force, dry_run=args.dry_run,
-                   dashboard_out=None if store.kind == "redis" else Path(args.dashboard))
+    if store.kind == "redis" and not args.dry_run and not store.acquire_lock(RUN_BUDGET_SECONDS + 120):
+        log("Another check is running (Vercel or GitHub); nothing to do.")
+        return 0
+    try:
+        report = check(Path(args.config), store, summary=args.summary, force=args.force, dry_run=args.dry_run,
+                       dashboard_out=None if store.kind == "redis" else Path(args.dashboard))
+    finally:
+        if store.kind == "redis" and not args.dry_run:
+            store.release_lock()
     return report["exit_code"]
 
 
