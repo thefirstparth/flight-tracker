@@ -78,6 +78,7 @@ def collect(config: Path, store) -> dict:
             "id": w.id, "name": w.name, "trip": w.trip, "who": w.who,
             "from": w.origin, "to": w.destination, "depart": w.depart, "return": w.ret,
             "depart_until": w.depart_until, "trip_days": w.trip_days,
+            "return_until": w.return_until, "quiet_until": w.quiet_until,
             "flights": list(w.flights) if w.flights else None, "target": w.target,
             "search": w.search_id, "link": tracker.google_link(w),
             "state": {k: st.get(k) for k in ("last", "last_flights", "low", "low_at", "high",

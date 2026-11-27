@@ -21,6 +21,12 @@
 #   depart_until = last possible departure day
 #   trip_days    = trip length for a round trip (leave out for one way)
 # The watch then tracks the cheapest direct price on any day in the window.
+# For a round trip with a window at both ends, use return and return_until
+# (first and last possible return day) instead of trip_days.
+#
+# Optional per watch:
+#   quiet_until       = "YYYY-MM-DD": tracked and shown, but no Telegram alerts before this day
+#   check_every_hours = how often to check this watch (default: check_every_minutes)
 #
 # A watch stops being checked once its departure date has passed.
 
@@ -90,3 +96,16 @@ flights = ["6E 1217 | QP 623", "any"]
 # around ₹35,000 from late October to mid-November). Hotels are booked for
 # these exact dates, so no alternative dates are tracked.
 target = 37000
+
+[[watch]]
+name = "Bengaluru - Prayagraj for Diwali, cheapest direct round trip"
+who = "You"
+trip = "Diwali"
+from = "BLR"
+to = "IXD"
+depart = "2027-10-23"        # Sat 23 Oct ...
+depart_until = "2027-10-27"  # ... to Wed 27 Oct, before Diwali (Fri 29 Oct)
+return = "2027-10-31"        # Sun 31 Oct ...
+return_until = "2027-11-01"  # ... or Mon 1 Nov
+quiet_until = "2027-02-01"   # no Telegram alerts before 1 Feb 2027
+check_every_hours = 6        # 10 date pairs = 10+ Google pages a check: go easy

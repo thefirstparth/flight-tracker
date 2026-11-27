@@ -1,6 +1,7 @@
 """Offline tests for the tracker (no network). Run: python -m unittest -v"""
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import tracker as t
@@ -200,3 +201,42 @@ class Retrying(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DateWindows(unittest.TestCase):
+    KEY = ("BLR", "IXD", "2027-10-23..2027-10-24", "2027-10-31..2027-11-01")
+
+    def setUp(self):
+        t._window_prices.clear(); t._unfinished.clear(); t._answered_empty.clear(); t._google_insights.clear()
+        t._deadline = None
+        p = mock.patch.object(t.time, "sleep")
+        p.start(); self.addCleanup(p.stop)
+
+    def test_cheapest_pair_then_its_flights(self):
+        prices = {("2027-10-23", "2027-10-31"): 9000.0, ("2027-10-24", "2027-10-31"): 8000.0,
+                  ("2027-10-23", "2027-11-01"): None, ("2027-10-24", "2027-11-01"): 8500.0}
+        legs = ({"flight": "6E 6531", "dep": "2027-10-24T11:45"}, {"flight": "6E 6532", "dep": "2027-10-31T15:00"})
+        with mock.patch.object(t, "_cheapest_on", side_effect=lambda o, d, dep, ret, s: prices[(dep, ret)]), \
+                mock.patch.object(t, "_search_once", return_value=[t.Option(8000, ("6E 6531", "6E 6532"), ("a", "b"), legs)]) as once:
+            got = t._search_windows(self.KEY, S)
+        once.assert_called_once_with(("BLR", "IXD", "2027-10-24", "2027-10-31"), S, set())
+        self.assertEqual(got[0].flights, ("6E 6531", "6E 6532"))
+        self.assertEqual(len(t._window_prices[t.search_id(self.KEY)]), 4)
+
+    def test_nothing_on_sale_is_an_answer(self):
+        with mock.patch.object(t, "_cheapest_on", return_value=None):
+            self.assertEqual(t._search_windows(self.KEY, S), [])
+        self.assertIn(self.KEY, t._answered_empty)
+
+    def test_refusal_stops_and_keeps_progress(self):
+        calls = []
+
+        def refuse_second(o, d, dep, ret, s):
+            calls.append(dep)
+            if len(calls) > 1:
+                raise t.NotAnswered("blocked")
+            return 9000.0
+        with mock.patch.object(t, "_cheapest_on", side_effect=refuse_second):
+            self.assertEqual(t._search_windows(self.KEY, S), [])
+        self.assertNotIn(self.KEY, t._answered_empty)
+        self.assertEqual(len(t._window_prices[t.search_id(self.KEY)]), 1)  # the first pair is remembered

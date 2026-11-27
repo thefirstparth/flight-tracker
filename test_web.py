@@ -327,10 +327,21 @@ class FlexibleConfig(unittest.TestCase):
         self.assertTrue(w.flexible)
         self.assertEqual(w.search_id, "BLR|SIN|2027-03-01..2027-03-10|5d")
 
-    def test_rejects_return_with_window(self):
-        with self.assertRaises(tracker.ConfigError):
-            self.load('[[watch]]\nname="x"\nfrom="BLR"\nto="SIN"\ndepart="2027-03-01"\n'
-                      'depart_until="2027-03-10"\nreturn="2027-03-12"\n')
+    def test_return_window(self):
+        _, (w,) = self.load('[[watch]]\nname="x"\nfrom="BLR"\nto="IXD"\ndepart="2027-10-23"\n'
+                            'depart_until="2027-10-27"\nreturn="2027-10-31"\nreturn_until="2027-11-01"\n'
+                            'quiet_until="2027-02-01"\ncheck_every_hours=6\n')
+        self.assertEqual(w.search_id, "BLR|IXD|2027-10-23..2027-10-27|2027-10-31..2027-11-01")
+        self.assertEqual((w.quiet_until, w.check_every_hours, w.last_date), ("2027-02-01", 6.0, "2027-10-27"))
+
+    def test_rejects_bad_windows(self):
+        bad = ['depart_until="2027-03-10"\nreturn="2027-03-09"\n',          # comes back inside the departure window
+               'return="2027-03-12"\nreturn_until="2027-03-13"\n',          # return window without a departure window
+               'depart_until="2027-03-10"\nreturn="2027-03-12"\ntrip_days=3\n',
+               'depart_until="2027-03-10"\nreturn="2027-03-14"\nreturn_until="2027-03-12"\n']
+        for extra in bad:
+            with self.assertRaises(tracker.ConfigError, msg=extra):
+                self.load('[[watch]]\nname="x"\nfrom="BLR"\nto="SIN"\ndepart="2027-03-01"\n' + extra)
 
     def test_trip_days_needs_window(self):
         with self.assertRaises(tracker.ConfigError):

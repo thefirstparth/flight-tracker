@@ -65,6 +65,8 @@ def _problem(e: Exception | None) -> str:
     """A short description of why Google gave no prices: rate limit, other HTTP error, timeout or empty."""
     global _last_problem
     global _last_response
+    if isinstance(e, NotAnswered):
+        e = None
     if e is None:
         text = "empty answer (Google refused or returned nothing)"
         if _last_response:
@@ -159,6 +161,11 @@ class Watch:
     depart_until: str | None = None
     trip_days: int | None = None
     who: str = ""  # optional label shown on the dashboard, e.g. "Parents"
+    # Round trip with a window at both ends: leave any day from depart to
+    # depart_until, come back any day from return to return_until.
+    return_until: str | None = None
+    quiet_until: str | None = None  # tracked, but no Telegram alerts before this date
+    check_every_hours: float | None = None  # this watch only; default: check_every_minutes
 
     @property
     def flexible(self) -> bool:
@@ -176,6 +183,9 @@ class Watch:
     @property
     def search_key(self) -> tuple:
         if self.flexible:
+            if self.ret:  # return window
+                return (self.origin, self.destination, f"{self.depart}..{self.depart_until}",
+                        f"{self.ret}..{self.return_until or self.ret}")
             return (self.origin, self.destination, f"{self.depart}..{self.depart_until}",
                     f"{self.trip_days}d" if self.trip_days else None)
         return (self.origin, self.destination, self.depart, self.ret)
@@ -262,12 +272,23 @@ def load_config(path: Path) -> tuple[dict, list[Watch]]:
             raise ConfigError(f"watch {name!r}: return is before depart")
         until = _date_text(w["depart_until"], "depart_until", name) if w.get("depart_until") else None
         trip_days = int(w["trip_days"]) if w.get("trip_days") else None
+        ret_until = _date_text(w["return_until"], "return_until", name) if w.get("return_until") else None
+        if ret_until and not ret:
+            raise ConfigError(f"watch {name!r}: return_until needs return (the first possible return day)")
+        if ret_until and ret_until < ret:
+            raise ConfigError(f"watch {name!r}: return_until is before return")
+        if ret_until and not until:
+            raise ConfigError(f"watch {name!r}: return_until needs depart_until (a departure window too)")
         if until:
             if until < depart:
                 raise ConfigError(f"watch {name!r}: depart_until is before depart")
-            if ret or w.get("flights"):
-                raise ConfigError(f"watch {name!r}: a flexible-date watch (depart_until) takes trip_days "
-                                  "instead of return, and no flights")
+            if w.get("flights"):
+                raise ConfigError(f"watch {name!r}: a flexible-date watch (depart_until) tracks the cheapest "
+                                  "direct flights, so it takes no flights list")
+            if ret and trip_days:
+                raise ConfigError(f"watch {name!r}: give either return (and return_until) or trip_days, not both")
+            if ret and ret <= until:
+                raise ConfigError(f"watch {name!r}: the return window must start after depart_until")
             if trip_days is not None and not 1 <= trip_days <= 30:
                 raise ConfigError(f"watch {name!r}: trip_days must be 1 to 30")
         elif trip_days:
@@ -283,8 +304,12 @@ def load_config(path: Path) -> tuple[dict, list[Watch]]:
                     f"watch {name!r}: list {legs} flight(s) (one per direction), got {len(flights)}")
         target = float(w["target"]) if w.get("target") else None
         trip = str(w.get("trip") or default_trip(origin, destination, depart, ret or until))
+        quiet = _date_text(w["quiet_until"], "quiet_until", name) if w.get("quiet_until") else None
+        every = float(w["check_every_hours"]) if w.get("check_every_hours") else None
+        if every is not None and not 0.5 <= every <= 48:
+            raise ConfigError(f"watch {name!r}: check_every_hours must be 0.5 to 48")
         watches.append(Watch(wid, name, origin, destination, depart, ret, flights, target, trip,
-                             until, trip_days, str(w.get("who") or "")))
+                             until, trip_days, str(w.get("who") or ""), ret_until, quiet, every))
     return settings, watches
 
 
@@ -392,7 +417,7 @@ def _shopping(client, filters, locale: dict, key: tuple | None = None):
         insight = parse_price_insight(inner)
         if insight:
             _google_insights[key] = insight
-    return flights or None
+    return flights  # [] = Google answered: no flights for these dates (e.g. not on sale yet)
 
 
 def _search_once(key: tuple, settings: dict, needed: set[tuple] = frozenset()) -> list[Option]:
@@ -403,6 +428,8 @@ def _search_once(key: tuple, settings: dict, needed: set[tuple] = frozenset()) -
 
     origin, destination, depart, ret = key
     if ".." in depart:
+        if ret and ".." in ret:
+            return _search_windows(key, settings)
         return _search_dates(key, settings)
     try:
         segments, trip_type = build_flight_segments(Airport[origin], Airport[destination], depart, ret)
@@ -666,7 +693,10 @@ def inr(amount: float) -> str:
 
 def google_link(w: Watch, option: Option | None = None) -> str:
     depart, ret = w.depart, w.ret
-    if w.flexible and option and option.flights:  # the cheapest dates found
+    if w.flexible and option and option.legs:  # the cheapest dates found, with their flights
+        depart = option.legs[0]["dep"][:10]
+        ret = option.legs[-1]["dep"][:10] if len(option.legs) > 1 and w.ret else None
+    elif w.flexible and option and option.flights and is_date(option.flights[0]):  # the cheapest dates found
         depart = option.flights[0]
         ret = option.flights[1] if len(option.flights) > 1 else None
     q = f"Flights from {w.origin} to {w.destination} on {depart}"
@@ -914,7 +944,16 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
     searches = state.setdefault("searches", {})
     for sid in [k for k in searches if k not in {search_id(k2) for k2 in needed}]:
         del searches[sid]  # search no longer used by any watch
-    due = [k for k in needed if _due(k, searches, now_dt, settings["check_every_minutes"], force)]
+    every: dict[tuple, float] = {}  # minutes between checks, per search
+    for w in active:
+        minutes = w.check_every_hours * 60 if w.check_every_hours else settings["check_every_minutes"]
+        every[w.search_key] = min(every.get(w.search_key, minutes), minutes)
+    due = [k for k in needed if _due(k, searches, now_dt, every[k], force)]
+    _window_prices.clear()
+    _window_prices.update({k: v for k, v in (state.get("window_prices") or {}).items()
+                           if k in {search_id(k2) for k2 in needed}})
+    _unfinished.clear()
+    _answered_empty.clear()
     due.sort(key=lambda k: (searches.get(search_id(k)) or {}).get("checked_at", ""))  # oldest first
 
     results: dict[tuple, list[Option] | None] = {}
@@ -932,6 +971,12 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
         _google_insights.pop(key, None)
         _last_problem = None
         results[key] = fetch_options(key, settings, needed[key])
+        if results[key] is None and key in _unfinished:  # a date-window search to finish next run
+            del results[key]
+            log("Run time budget used up; this search continues on the next run.")
+            break
+        if results[key] is None and key in _answered_empty:
+            results[key] = []  # Google answered: nothing on sale for these dates yet
         if key in _google_insights:
             google[search_id(key)] = {"checked_at": now, **_google_insights.pop(key)}
             g = google[search_id(key)]
@@ -943,7 +988,8 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
             incomplete.add(key)
         searches[search_id(key)] = {"checked_at": now, "ok": results[key] is not None and key not in incomplete}
         n = len(results[key] or [])
-        log(f"  {n} direct option(s)" if n else "  no answer from Google after retries")
+        log(f"  {n} direct option(s)" if n else "  nothing on sale yet" if results[key] == [] else
+            "  no answer from Google after retries")
         if results[key] is None:
             refused = True
             left = len(due) - i - 1
@@ -951,7 +997,8 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
                 log(f"Google is not answering: stopping this run; {left} other search(es) wait.")
             break
     report["checked"] = len(results)
-    report["answered"] = sum(1 for v in results.values() if v)
+    report["answered"] = sum(1 for v in results.values() if v is not None)
+    state["window_prices"] = dict(_window_prices)
     if results:
         if report["answered"]:
             mine.update({"last_answer_at": now, "refused_runs": 0})
@@ -1016,6 +1063,7 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
             "status": "ok" if option else "not_found"})
         shown = f"{inr(option.price)}  {describe_flights(option.flights, option.times)}" if option else "NOT FOUND"
         log(f"{w.name}\n    {shown}")
+        quiet = bool(w.quiet_until) and now_dt.date().isoformat() < w.quiet_until
         for kind, info in events:
             event_rows.append({
                 "checked_at": now, "watch_id": w.id, "kind": kind,
@@ -1025,6 +1073,9 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
                 if not starting_up:
                     messages.append("started:" + f"👀 Now watching: {w.name}\n{inr(st['last'])} · "
                                     f"{describe_flights(option.flights, option.times)}\n{google_link(w, option)}")
+                continue
+            if quiet:
+                log(f"    (no alert: '{kind}' is quiet until {w.quiet_until})")
                 continue
             messages.append(kind + ":" + event_message(kind, info, w, st, option))
 
@@ -1098,9 +1149,95 @@ def _cheapest_on(origin: str, destination: str, depart: str, ret: str | None, se
         trip_type=trip_type, passenger_info=PassengerInfo(adults=int(settings["adults"])),
         flight_segments=segments, stops=MaxStops.NON_STOP if settings["direct_only"] else MaxStops.ANY,
         sort_by=SortBy.CHEAPEST)
-    rows = _shopping(SearchFlights(), filters, dict(currency=settings["currency"], country="IN", language="en")) or []
+    rows = _shopping(SearchFlights(), filters, dict(currency=settings["currency"], country="IN", language="en"))
+    if rows is None:
+        raise NotAnswered("Google sent a page without results")
     prices = [r.price for r in rows if r.price is not None and not (settings["direct_only"] and r.stops)]
     return float(min(prices)) if prices else None
+
+
+class NotAnswered(Exception):
+    """Google sent no results page (refused, bot check): not the same as 'no flights'."""
+
+
+def _price_on(origin: str, destination: str, depart: str, ret: str | None, settings: dict) -> tuple[bool, float | None]:
+    """(answered, cheapest price) for one date pair, tried twice. A page that
+    loads without flights is an answer: (True, None)."""
+    for attempt in range(2):
+        try:
+            return True, _cheapest_on(origin, destination, depart, ret, settings)
+        except NotAnswered as e:
+            log(f"    {depart}{' to ' + ret if ret else ''}, try {attempt + 1}: {_problem(None)} ({e})")
+        except Exception as e:
+            log(f"    {depart}{' to ' + ret if ret else ''}, try {attempt + 1}: {_problem(e)}")
+        if attempt == 0 and not out_of_time():
+            time.sleep(RETRY_WAIT_SECONDS[0])
+    return False, None
+
+
+# Date-window round trips (leave on one of several days, return on one of
+# several): one page per date pair. Prices are remembered for a couple of hours
+# so a check that needs more pages than one run allows continues on the next run.
+WINDOW_PRICE_HOURS = 2
+_window_prices: dict[str, dict[str, list]] = {}  # search id -> "depart|return" -> [price or None, unix time]
+_unfinished: set[tuple] = set()  # window searches cut short by the run's time budget
+_answered_empty: set[tuple] = set()  # window searches where Google answered: nothing on sale
+
+
+def _days(first: str, last: str) -> list[str]:
+    d, end, out = date.fromisoformat(first), date.fromisoformat(last), []
+    while d <= end:
+        out.append(d.isoformat())
+        d += timedelta(days=1)
+    return out
+
+
+def _search_windows(key: tuple, settings: dict) -> list[Option]:
+    """Cheapest direct round trip leaving on any day of one window and coming
+    back on any day of another; then the real flights for the cheapest pair."""
+    origin, destination, dwin, rwin = key
+    pairs = [(d, r) for d in _days(*dwin.split("..")) for r in _days(*rwin.split("..")) if r > d]
+    memo = _window_prices.setdefault(search_id(key), {})
+    priced, answered = {}, False
+    for d, r in pairs:
+        hit = memo.get(f"{d}|{r}")
+        if hit and time.time() - hit[1] < WINDOW_PRICE_HOURS * 3600:
+            answered = True
+            if hit[0]:
+                priced[(d, r)] = hit[0]
+            continue
+        if out_of_time():
+            _unfinished.add(key)
+            log(f"    {len(memo)} of {len(pairs)} date pairs priced so far; the rest on the next run")
+            return []
+        ok, price = _price_on(origin, destination, d, r, settings)
+        if not ok:
+            return []  # Google is refusing: the run stops and backs off; prices so far are kept
+        answered = True
+        memo[f"{d}|{r}"] = [price, time.time()]
+        if price:
+            priced[(d, r)] = price
+        time.sleep(PAUSE_BETWEEN_DATES)
+    if not priced:
+        if answered:
+            _answered_empty.add(key)
+            log(f"    no direct flights on sale yet for any of the {len(pairs)} date pairs")
+        return []
+    (d, r), price = min(priced.items(), key=lambda kv: (kv[1], kv[0]))
+    log(f"    cheapest dates: {d} to {r}, {inr(price)}; loading its flights")
+    concrete = (origin, destination, d, r)
+    _google_insights.pop(concrete, None)
+    try:
+        full = _search_once(concrete, settings, set()) if not out_of_time() else []
+    except Exception as e:
+        log(f"    flights for {d} to {r}: {_problem(e)}")
+        full = []
+    if concrete in _google_insights:
+        _google_insights[key] = _google_insights.pop(concrete)
+    if full:
+        return full
+    times = tuple(datetime.fromisoformat(x).strftime("%a %-d %b") for x in (d, r))
+    return [Option(price=price, flights=(d, r), times=times)]  # the price, without flight details this time
 
 
 def _date_grid(origin: str, destination: str, start: date, end: date, days: int | None,
@@ -1114,8 +1251,7 @@ def _date_grid(origin: str, destination: str, start: date, end: date, days: int 
     while d <= end:
         r = d + timedelta(days=days) if days else None
         dates = (d.isoformat(),) + ((r.isoformat(),) if r else ())
-        price = _with_retries(lambda: _cheapest_on(origin, destination, dates[0], r.isoformat() if r else None,
-                                                    settings), f"price on {' to '.join(dates)}")
+        _, price = _price_on(origin, destination, dates[0], r.isoformat() if r else None, settings)
         if price:
             out[dates] = price
         d += timedelta(days=1)

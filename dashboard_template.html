@@ -214,7 +214,7 @@ const AIR = Object.assign({}, D.airlines || {}, {"6E": "IndiGo", QP: "Akasa Air"
 const LOGO = {"6E": "#1b2a8a", QP: "#e8541a", IX: "#c8441a", AI: "#a8121b", SQ: "#1c2d5a", TR: "#b38900",
   SG: "#c8102e", UK: "#5b2a5e", TG: "#5a2d82", FD: "#d71920", EK: "#c60c30"};
 const CITY = {SIN: "Singapore", HKT: "Phuket", BLR: "Bengaluru", DEL: "Delhi", BOM: "Mumbai", MAA: "Chennai",
-  HYD: "Hyderabad", CCU: "Kolkata", DXB: "Dubai", BKK: "Bangkok", KUL: "Kuala Lumpur", DPS: "Bali"};
+  HYD: "Hyderabad", CCU: "Kolkata", IXD: "Prayagraj", LKO: "Lucknow", VNS: "Varanasi", DXB: "Dubai", BKK: "Bangkok", KUL: "Kuala Lumpur", DPS: "Bali"};
 const city = c => CITY[c] || c;
 const code = f => f.split(" ")[0];
 const WORD = {book: ["w-book", "Book now"], fair: ["w-fair", "Fair"], wait: ["w-wait", "Wait"]};
@@ -261,6 +261,13 @@ function routeText(w) {
   return [w.from + " ", h("span", {"aria-hidden": "true"}, w.return ? "⇄" : "→"),
     h("span", {class: "sr"}, w.return ? "to and from" : "to"), " " + w.to];
 }
+function whenText(w) {  // date windows: "Sat 23 – Wed 27 Oct, back Sun 31 Oct – Mon 1 Nov"
+  if (!w.depart_until) return dateRange(w.depart, w.return);
+  const out = dateRange(w.depart, w.depart_until);
+  return w.return ? `${out}, back ${w.return_until && w.return_until !== w.return ? dateRange(w.return, w.return_until) : fWDM.format(dOnly(w.return))}` : out;
+}
+const notOnSale = w => (w.state || {}).misses && (w.state || {}).last == null;
+const quietNow = w => w.quiet_until && w.quiet_until > todayIST();
 function daysText(n) { return n > 1 ? `in ${n} days` : n === 1 ? "tomorrow" : n === 0 ? "today" : "departed"; }
 
 // The flights to show for a trip: "cheapest" is what is tracked and alerted on;
@@ -313,12 +320,13 @@ function listView() {
   const ws = [...(D.watches || [])].sort((a, b) => a.depart < b.depart ? -1 : a.depart > b.depart ? 1 : 0);
   const rows = ws.map(w => {
     const st = w.state || {}, a = w.advice;
-    const [cls, word] = st.misses ? ["w-wait", "Not found"] : a ? WORD[a.verdict] : ["w-none", st.last == null ? "Checking…" : ""];
+    const [cls, word] = notOnSale(w) ? ["w-none", "Not on sale yet"] : st.misses ? ["w-wait", "Not found"]
+      : a ? WORD[a.verdict] : ["w-none", st.last == null ? "Checking…" : ""];
     return h("a", {class: "row", href: "#/trip/" + encodeURIComponent(w.id)},
       h("div", null,
         h("div", {class: "route"}, routeText(w)),
         h("div", {class: "city"}, city(w.to), w.who ? h("span", {class: "tag"}, w.who) : null),
-        h("div", {class: "when"}, `${dateRange(w.depart, w.return)} · `, h("span", {style: "white-space:nowrap"}, daysText(daysUntil(w.depart))))),
+        h("div", {class: "when"}, `${whenText(w)} · `, h("span", {style: "white-space:nowrap"}, daysText(daysUntil(w.depart))))),
       h("div", {class: "right"},
         h("div", {class: "price num"}, st.last != null ? inr(st.last) : "—"),
         word ? h("div", {class: "word " + cls}, word) : null),
@@ -371,11 +379,14 @@ function pricePanel(w, which) {
   const checked = w.checked_at || D.updated_at;
   block.append(...[
     h("div", {class: "big num"}, price != null ? inr(price) : "—"),
-    h("div", {class: "sub"}, `${w.return ? "Round trip" : "One way"}${checked ? " · checked " + ago(t(checked)) : ""}`),
-    st.misses ? h("div", {class: "pill p-wait"}, "Not found on the last check") : null,
+    h("div", {class: "sub"}, `${w.return ? "Round trip" : "One way"}${w.depart_until ? " · cheapest of these dates" : ""}` +
+      `${checked ? " · checked " + ago(t(checked)) : ""}`),
+    notOnSale(w) ? h("p", {class: "reason"}, "Not on sale yet: airlines open dates about 11 months ahead. The price appears here as soon as they do.")
+      : st.misses ? h("div", {class: "pill p-wait"}, "Not found on the last check") : null,
     a ? h("div", {class: "pill " + PILL[a.verdict]}, a.title) : null,
     a ? h("p", {class: "reason"}, a.summary) : null,
-    w.target && st.last != null && st.last > w.target ? h("p", {class: "reason"}, `Telegram alert when it drops to ${inr(w.target)}.`) : null,
+    quietNow(w) ? h("p", {class: "reason"}, `Tracked quietly: Telegram alerts start ${fWDM.format(dOnly(w.quiet_until))} ${w.quiet_until.slice(0, 4)}.`)
+      : w.target && st.last != null && st.last > w.target ? h("p", {class: "reason"}, `Telegram alert when it drops to ${inr(w.target)}.`) : null,
   ].filter(Boolean));
   return [block, board(option),
     h("div", {class: "book-wrap"}, h("a", {class: "book", href: w.link, target: "_blank", rel: "noopener noreferrer"},
@@ -500,7 +511,7 @@ function tripView(w) {
     h("div", {class: "trip-head"},
       h("div", {class: "route"}, routeText(w), w.who ? h("span", {class: "tag"}, w.who) : null),
       h("h1", {tabindex: "-1"}, city(w.to)),
-      h("div", {class: "when"}, `${dateRange(w.depart, w.return)} · ${daysText(daysUntil(w.depart))}`)),
+      h("div", {class: "when"}, `${whenText(w)} · ${daysText(daysUntil(w.depart))}`)),
     h("section", {class: "panel"}, pricePanel(w, state.which[w.id] || "cheapest")),
     historyChart(w),
     otherWeeks(w));
