@@ -9,7 +9,8 @@
 #   return   - return date for a round trip; leave it out for one way
 #   flights  - the exact flights to watch, e.g. ["6E 1457", "6E 1458"]
 #              (outbound first, then return). Use "any" for a direction
-#              where any direct flight will do, e.g. ["6E 1217", "any"].
+#              where any direct flight will do, e.g. ["6E 1217", "any"], and
+#              "A | B" for a choice of flights, the first one preferred.
 #              Leave it out to watch the CHEAPEST direct option both ways.
 #   who      - optional label on the dashboard, e.g. "Parents"
 #   target   - optional: alert when the price falls to or below this (INR)
@@ -71,15 +72,16 @@ flights = ["6E 1203", "6E 1204"]
 
 
 # ---------- Phuket, Fri 22 - Tue 26 January 2027 ----------
-# Out on IndiGo 6E 1217 (06:20); back on whichever direct flight makes the
-# round trip cheapest ("any").
+# Out on IndiGo 6E 1217 (06:20, preferred) or Akasa QP 623 (10:40, fine if it
+# is cheaper); back on whichever direct flight makes the round trip cheapest.
+# The tracked price is the cheapest of these combinations.
 
 [[watch]]
-name = "Bengaluru - Phuket, IndiGo 6E 1217 out, cheapest direct return"
+name = "Bengaluru - Phuket, IndiGo 6E 1217 or Akasa QP 623 out, cheapest direct return"
 who = "You"
 trip = "Phuket"
 from = "BLR"
 to = "HKT"
 depart = "2027-01-22"
 return = "2027-01-26"
-flights = ["6E 1217", "any"]
+flights = ["6E 1217 | QP 623", "any"]

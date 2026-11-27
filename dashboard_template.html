@@ -4,156 +4,185 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#e7e5e0">
 <title>Flight Prices</title>
 <style>
+/* One theme, between light and dark: warm stone, airport-signage navy, and
+   colour only where it means something (green cheaper, red dearer, amber above the low). */
 :root {
   color-scheme: light;
-  --page: #f6f7f9; --card: #ffffff; --line: #e6e8eb; --soft: #f1f3f4;
-  --ink: #1f1f1f; --ink-2: #5f6368; --ink-3: #80868b;
-  --blue: #1a73e8; --blue-wash: #e8f0fe; --green: #188038; --red: #c5221f;
-  --chart: #1a73e8; --chart-fill: rgba(26,115,232,0.10);
-  --shadow: 0 1px 2px rgba(60,64,67,0.10), 0 1px 3px 1px rgba(60,64,67,0.06);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --page: #121314; --card: #1d1e20; --line: #2f3134; --soft: #26282b;
-    --ink: #e8eaed; --ink-2: #b4b8bd; --ink-3: #8f959b;
-    --blue: #8ab4f8; --blue-wash: rgba(138,180,248,0.14); --green: #81c995; --red: #f28b82;
-    --chart: #8ab4f8; --chart-fill: rgba(138,180,248,0.14);
-    --shadow: none;
-  }
+  --bg: #e7e5e0; --panel: #f6f5f2; --inset: #eeece7; --line: #dcd8d0;
+  --ink: #161513; --ink-2: #57544e; --ink-3: #807c75;
+  --navy: #1f3a5f; --navy-wash: #dfe5ec;
+  --down: #12744a; --down-bg: #d9ede1; --up: #b3321f; --up-bg: #f5ded8; --amber: #835800; --amber-bg: #f1e6c9;
+  --radius: 20px;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; background: var(--page); color: var(--ink);
-  font: 15px/1.45 "Google Sans", Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; }
-a { color: var(--blue); text-decoration: none; }
-.wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 56px; }
-.num { font-variant-numeric: tabular-nums; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+a { color: var(--navy); text-decoration: none; }
+.num, .t { font-variant-numeric: tabular-nums; }
+.caps { font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+.wrap { max-width: 860px; margin: 0 auto; padding: 28px 16px 64px; }
 
-/* header */
-.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.top h1 { margin: 0; font-size: 26px; font-weight: 500; letter-spacing: -0.01em; }
-.sub { margin: 2px 0 0; color: var(--ink-2); font-size: 14px; }
-.sub.warn { color: var(--red); }
-.actions { display: flex; gap: 4px; align-items: center; }
-.icon-btn { width: 40px; height: 40px; border-radius: 50%; border: 0; background: transparent; color: var(--ink-2);
-  display: grid; place-items: center; cursor: pointer; }
-.icon-btn:hover { background: var(--soft); }
-.icon-btn svg { width: 22px; height: 22px; }
-.icon-btn.spin svg { animation: spin 1s linear infinite; }
+/* top bar */
+.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.top h1 { margin: 4px 0 0; font-size: 30px; font-weight: 650; letter-spacing: -0.02em; }
+.status { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--ink-2); font-size: 14px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--down); flex: none; }
+.dot.warn { background: var(--up); }
+.actions { display: flex; gap: 6px; }
+.icon-btn { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink-2); display: grid; place-items: center; cursor: pointer; }
+.icon-btn:hover { color: var(--ink); }
+.icon-btn svg { width: 20px; height: 20px; }
+.spin svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .menu { position: relative; }
 .menu summary { list-style: none; }
 .menu summary::-webkit-details-marker { display: none; }
-.menu-pop { position: absolute; right: 0; top: 44px; background: var(--card); border: 1px solid var(--line);
-  border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); padding: 6px; min-width: 150px; z-index: 5; }
-.menu-pop a { display: block; padding: 8px 12px; border-radius: 8px; color: var(--ink); }
-.menu-pop a:hover { background: var(--soft); }
-.notice { margin-top: 14px; padding: 10px 14px; border-radius: 12px; background: var(--blue-wash); font-size: 14px; }
+.menu-pop { position: absolute; right: 0; top: 48px; z-index: 5; min-width: 150px; padding: 6px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px rgba(22,21,19,0.12); }
+.menu-pop a { display: block; padding: 9px 12px; border-radius: 9px; color: var(--ink); }
+.menu-pop a:hover { background: var(--inset); }
+.notice { margin-top: 16px; padding: 11px 16px; border-radius: 14px; background: var(--navy-wash); color: var(--navy); font-size: 14px; }
 
-/* trip */
-.trip { margin-top: 28px; }
-.trip-head { display: flex; align-items: center; gap: 14px; margin: 0 4px 12px; }
-.city { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; flex: none;
-  background: var(--blue-wash); color: var(--blue); font-weight: 600; font-size: 13px; letter-spacing: 0.04em; }
-.trip-head h2 { margin: 0; font-size: 22px; font-weight: 500; }
-.trip-head .dates { color: var(--ink-2); font-size: 14px; }
+/* trip board */
+.trip { margin-top: 34px; animation: rise 0.35s ease both; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.trip-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 0 6px 12px; }
+.trip-head h2 { margin: 2px 0 0; font-size: 26px; font-weight: 650; letter-spacing: -0.02em; }
+.trip-head .when { color: var(--ink-2); font-size: 14px; margin-top: 2px; }
+.countdown { text-align: right; flex: none; }
+.countdown b { display: block; font-size: 26px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; }
 
-/* card */
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow);
-  margin-bottom: 14px; overflow: hidden; }
-.card-top { display: flex; justify-content: space-between; gap: 12px; padding: 18px 20px 6px; }
-.airline { font-size: 19px; font-weight: 500; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.who { font-size: 12px; font-weight: 500; color: var(--blue); background: var(--blue-wash); border-radius: 999px; padding: 2px 10px; }
-.meta { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
-.price-box { text-align: right; flex: none; }
-.price { font-size: 24px; font-weight: 500; white-space: nowrap; }
-.price.down { color: var(--green); }
-.price.up { color: var(--red); }
-.was { color: var(--ink-3); font-size: 14px; text-decoration: line-through; }
-.price-note { color: var(--ink-3); font-size: 12px; }
-.missing { color: var(--red); font-size: 13px; }
+.fare { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
+.fare-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; padding: 20px 22px 16px; }
+.who { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tag { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--navy-wash); color: var(--navy); }
+.big { font-size: 40px; font-weight: 650; letter-spacing: -0.03em; line-height: 1.05; margin-top: 6px; }
+.verdict { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 14px; font-weight: 550;
+  padding: 5px 12px 5px 10px; border-radius: 999px; }
+.verdict::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.v-down { background: var(--down-bg); color: var(--down); }
+.v-up { background: var(--up-bg); color: var(--up); }
+.v-amber { background: var(--amber-bg); color: var(--amber); }
+.v-neutral { background: var(--inset); color: var(--ink-2); }
+.side { text-align: right; display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 8px; }
+.change { font-size: 14px; font-weight: 550; white-space: nowrap; }
+.change.down { color: var(--down); } .change.up { color: var(--up); } .change.flat { color: var(--ink-3); font-weight: 500; }
+.spark { width: 132px; height: 40px; display: block; }
+.note { grid-column: 1 / -1; font-size: 13px; color: var(--ink-2); }
 
-.legs { padding: 4px 20px; }
-.leg { display: grid; grid-template-columns: 36px minmax(0, 1.6fr) minmax(0, 1fr) auto; gap: 4px 14px;
-  align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
-.leg:last-child { border-bottom: 0; }
-.logo { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; font-size: 11px;
-  font-weight: 700; color: #fff; letter-spacing: 0.02em; }
-.leg b { font-weight: 500; display: block; }
-.small { color: var(--ink-2); font-size: 13px; }
-.leg .stops { color: var(--ink-2); font-size: 14px; }
-@media (max-width: 560px) {
-  .leg { grid-template-columns: 36px minmax(0, 1fr) auto; }
-  .leg .dur { grid-column: 2; margin-top: -2px; }
-  .leg .dur b { display: inline; font-weight: 400; color: var(--ink-2); font-size: 13px; }
-  .leg .dur span::before { content: " · "; }
-  .leg .stops { grid-column: 3; grid-row: 1; align-self: start; font-size: 13px; }
-  .card-top { padding: 16px 16px 4px; }
-  .legs { padding: 4px 16px; }
-  .price { font-size: 22px; }
-}
+/* departure-board rows */
+.board { background: var(--inset); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 4px 22px; }
+.board-row { display: grid; grid-template-columns: 52px 104px 168px minmax(0, 1fr) 70px; gap: 12px; align-items: center;
+  padding: 12px 0; border-bottom: 1px dashed var(--line); }
+.board-row:last-child { border-bottom: 0; }
+.board-row .dir { font-size: 11px; letter-spacing: 0.09em; font-weight: 700; color: var(--ink-3); }
+.board-row .date { font-size: 14px; color: var(--ink-2); }
+.board-row .times { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+.board-row .times .arr { color: var(--ink-3); font-weight: 400; margin: 0 6px; }
+.board-row .times sup { font-size: 11px; color: var(--ink-3); font-weight: 500; }
+.flight { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.flight .code { font-weight: 600; font-size: 14px; white-space: nowrap; }
+.flight .name { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.logo { width: 26px; height: 26px; border-radius: 7px; flex: none; display: grid; place-items: center;
+  color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }
+.board-row .dur { text-align: right; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.board-row .dur b { display: block; color: var(--ink); font-weight: 550; font-size: 14px; }
+.mdate { display: none; color: var(--ink-3); font-weight: 500; font-size: 13px; margin-right: 6px; }
 
-.choices { margin: 4px 20px 6px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.choices-head { padding: 10px 14px; font-size: 13px; color: var(--ink-2); background: var(--soft); }
-.choice { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 10px; align-items: center;
-  padding: 10px 14px; border-top: 1px solid var(--line); }
-.choice .logo { width: 28px; height: 28px; font-size: 10px; }
-.choice b { font-weight: 500; display: block; }
-.choice .p { font-weight: 500; text-align: right; }
-.choice .p small { display: block; font-weight: 400; color: var(--ink-3); font-size: 12px; }
-.choice.best .p { color: var(--green); }
-@media (max-width: 560px) { .choices { margin: 4px 16px 6px; } }
+/* options (all acceptable combinations) */
+.options { padding: 16px 22px 6px; }
+.options .caps { margin-bottom: 6px; }
+.opt { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px 12px; align-items: center;
+  padding: 11px 0; border-top: 1px solid var(--line); }
+.opt .leg { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.opt .leg b { font-weight: 600; font-size: 14px; white-space: nowrap; }
+.opt .leg small { display: block; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opt .price { text-align: right; font-weight: 650; font-size: 16px; white-space: nowrap; }
+.opt .price small { display: block; font-weight: 600; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.opt.best .price, .opt.best .price small { color: var(--down); }
+.pref { color: var(--navy); font-weight: 600; }
+.show-all { border: 0; background: transparent; color: var(--navy); font: inherit; font-weight: 600; font-size: 14px;
+  padding: 10px 0 4px; cursor: pointer; border-top: 1px solid var(--line); width: 100%; text-align: left; }
 
-.hist-toggle { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; border-top: 1px solid var(--line);
-  background: transparent; color: var(--ink); padding: 14px 20px; font: inherit; cursor: pointer; text-align: left; }
-.hist-toggle:hover { background: var(--soft); }
-.hist-toggle .chev { display: grid; transition: transform 0.15s; color: var(--ink-2); }
-.hist-toggle .chev svg { width: 22px; height: 22px; }
-.hist-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
-.hist-toggle .sum { margin-left: auto; color: var(--ink-2); font-size: 13px; text-align: right; }
-.hist-toggle .label { white-space: nowrap; }
-@media (max-width: 560px) { .hist-toggle .days { display: none; } }
-.history { padding: 0 20px 14px; }
+/* history + foot */
+.more { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 22px 16px; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--ink);
+  font: inherit; font-weight: 550; cursor: pointer; padding: 4px 0; }
+.toggle svg { width: 20px; height: 20px; transition: transform 0.2s; color: var(--ink-3); }
+.toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.book { font-weight: 600; display: inline-flex; align-items: center; gap: 4px; padding: 9px 16px; border-radius: 999px;
+  background: var(--navy); color: #fff; font-size: 14px; white-space: nowrap; }
+.book:hover { background: #18304f; }
+.history { padding: 0 22px 18px; }
 .chart { position: relative; }
-.chart svg { display: block; width: 100%; height: 180px; overflow: visible; touch-action: pan-y; }
+.chart svg { display: block; width: 100%; height: 190px; touch-action: pan-y; }
 .chart .grid { stroke: var(--line); stroke-width: 1; }
 .chart .tick { fill: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
-.chart .cross { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 3 3; }
-.tip { position: absolute; top: -6px; pointer-events: none; background: var(--card); border: 1px solid var(--line);
-  border-radius: 8px; padding: 6px 10px; font-size: 13px; box-shadow: 0 2px 10px rgba(0,0,0,0.12); white-space: nowrap; }
-.tip b { font-weight: 600; }
-.hist-facts { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); margin-top: 8px; }
-.hist-facts b { color: var(--ink); font-weight: 500; }
+.chart .cross { stroke: var(--ink-3); stroke-dasharray: 3 3; }
+.tip { position: absolute; top: -4px; pointer-events: none; background: var(--ink); color: var(--panel); border-radius: 9px;
+  padding: 5px 10px; font-size: 13px; white-space: nowrap; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+.fact { background: var(--inset); border-radius: 14px; padding: 10px 12px; }
+.fact b { display: block; font-size: 17px; font-weight: 650; margin-top: 2px; }
+.fact span { font-size: 12px; color: var(--ink-3); }
+.checked { font-size: 12px; color: var(--ink-3); }
 
-.card-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  border-top: 1px solid var(--line); padding: 12px 20px; }
-.card-foot .checked { color: var(--ink-3); font-size: 12px; }
-.book { font-weight: 500; }
-@media (max-width: 560px) { .card-foot, .hist-toggle { padding-left: 16px; padding-right: 16px; } .history { padding: 0 16px 14px; } }
-
-.empty { text-align: center; padding: 48px 16px; color: var(--ink-2); }
-footer { margin-top: 32px; color: var(--ink-3); font-size: 12px; text-align: center; }
+footer { margin-top: 40px; text-align: center; color: var(--ink-3); font-size: 12px; }
+.empty { text-align: center; padding: 64px 16px; color: var(--ink-2); }
 html:not(.js) .actions { display: none; }
 table.data { border-collapse: collapse; width: 100%; font-size: 14px; }
 table.data td, table.data th { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+
+@media (max-width: 640px) {
+  .wrap { padding-top: 20px; }
+  .top h1 { font-size: 26px; }
+  .fare-head { padding: 18px 18px 14px; }
+  .big { font-size: 34px; }
+  .spark { width: 96px; height: 34px; }
+  .board { padding: 2px 18px; }
+  .board-row { grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "dir times dur" "dir flight flight"; gap: 4px 10px; }
+  .board-row .dir { grid-area: dir; align-self: start; padding-top: 5px; }
+  .board-row .date { display: none; }
+  .board-row .times { grid-area: times; font-size: 17px; }
+  .board-row .flight { grid-area: flight; }
+  .board-row .dur { grid-area: dur; }
+  .board-row .dur b { display: inline; }
+  .board-row .dur span { display: none; }
+  .mdate { display: inline; }
+  .options { padding: 14px 18px 4px; }
+  .opt { grid-template-columns: minmax(0, 1fr) auto; }
+  .opt .leg.out { grid-column: 1; grid-row: 1; }
+  .opt .leg.back { grid-column: 1; grid-row: 2; }
+  .opt .price { grid-column: 2; grid-row: 1 / span 2; }
+  .more { padding: 12px 18px 16px; }
+  .history { padding: 0 18px 16px; }
+  .facts { gap: 8px; }
+  .fact b { font-size: 15px; }
+  .countdown b { font-size: 22px; }
+  .trip-head h2 { font-size: 23px; }
+}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Tracked flights</h1>
-      <p class="sub" id="sub"></p>
+      <div class="caps">Fare board · direct flights</div>
+      <h1>Your flights</h1>
+      <div class="status"><span class="dot" id="dot"></span><span id="sub"></span></div>
     </div>
     <div class="actions" id="actions"></div>
   </header>
   <div id="notice"></div>
   <!--__NOSCRIPT__-->
   <main id="trips"></main>
-  <footer>Prices from Google Flights · direct flights only · always confirm on the airline's site before booking</footer>
+  <footer>Prices from Google Flights for 1 adult in economy · always confirm on the airline's site before booking</footer>
 </div>
 <script id="data" type="application/json">/*__DASHBOARD_DATA__*/null</script>
 <script>
@@ -163,25 +192,25 @@ const D = JSON.parse(document.getElementById("data").textContent) || {watches: [
 const TZ = "Asia/Kolkata", MIN = 60000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const nf = new Intl.NumberFormat("en-IN", {maximumFractionDigits: 0});
 const inr = v => v == null ? "–" : "₹" + nf.format(Math.round(v));
-const inrShort = v => v >= 1000 ? "₹" + (Math.round(v / 100) / 10) + "k" : "₹" + Math.round(v);
+const inrK = v => "₹" + (Math.round(v / 100) / 10) + "k";
 const t = s => s ? Date.parse(s) : NaN;
 const dOnly = s => { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
 const fmt = o => new Intl.DateTimeFormat("en-GB", Object.assign({timeZone: "UTC"}, o));
-const fDayMon = fmt({day: "numeric", month: "short"});
-const fWkDayMon = fmt({weekday: "short", day: "numeric", month: "short"});
-const fWkDayMonYr = {format: d => fWkDayMon.format(d) + " " + d.getUTCFullYear()};
+const fDM = fmt({day: "numeric", month: "short"}), fWDM = fmt({weekday: "short", day: "numeric", month: "short"});
+const fW = fmt({weekday: "short"});
 const fIST = new Intl.DateTimeFormat("en-GB", {timeZone: TZ, day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true});
-const fISTday = new Intl.DateTimeFormat("en-GB", {timeZone: TZ, day: "numeric", month: "short"});
-const AIRLINES = Object.assign({}, D.airlines || {}, {"6E": "IndiGo", "QP": "Akasa Air", "IX": "Air India Express",
-  "AI": "Air India", "SQ": "Singapore Airlines", "TR": "Scoot"});
-const LOGO = {"6E": "#1b2a8a", "QP": "#f2571b", "IX": "#d64a1c", "AI": "#b8141d", "SQ": "#1c2d5a", "TR": "#c99a00",
-  "SG": "#c8102e", "UK": "#5b2a5e", "TG": "#5a2d82", "FD": "#d71920", "EK": "#c60c30"};
+const fISTd = new Intl.DateTimeFormat("en-GB", {timeZone: TZ, day: "numeric", month: "short"});
+const AIR = Object.assign({}, D.airlines || {}, {"6E": "IndiGo", QP: "Akasa Air", IX: "Air India Express", AI: "Air India",
+  SQ: "Singapore Airlines", TR: "Scoot"});
+const LOGO = {"6E": "#1b2a8a", QP: "#e8541a", IX: "#c8441a", AI: "#a8121b", SQ: "#1c2d5a", TR: "#b38900",
+  SG: "#c8102e", UK: "#5b2a5e", TG: "#5a2d82", FD: "#d71920", EK: "#c60c30"};
 const CITY = {SIN: "Singapore", HKT: "Phuket", BLR: "Bengaluru", DEL: "Delhi", BOM: "Mumbai", MAA: "Chennai",
   HYD: "Hyderabad", CCU: "Kolkata", DXB: "Dubai", BKK: "Bangkok", KUL: "Kuala Lumpur", DPS: "Bali"};
 const city = c => CITY[c] || c;
+const code = f => f.split(" ")[0];
+const isAny = f => !f || f === "any";
 
-// Small DOM helper: text always goes in via text nodes, never as HTML.
-function h(tag, attrs, ...kids) {
+function h(tag, attrs, ...kids) {  // text always goes in as text nodes
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
@@ -194,140 +223,164 @@ function h(tag, attrs, ...kids) {
   return el;
 }
 const NS = "http://www.w3.org/2000/svg";
-function s(tag, attrs, text) {
-  const el = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
-  if (text != null) el.textContent = text;
-  return el;
-}
-function icon(path) { const v = s("svg", {viewBox: "0 0 24 24", "aria-hidden": "true"}); v.append(s("path", {d: path, fill: "currentColor"})); return v; }
-const ICON_REFRESH = "M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z";
-const ICON_MORE = "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z";
-const ICON_CHEV = "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z";
+const s = (tag, attrs, text) => { const el = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v); if (text != null) el.textContent = text; return el; };
+const icon = d => { const v = s("svg", {viewBox: "0 0 24 24", "aria-hidden": "true"}); v.append(s("path", {d, fill: "currentColor"})); return v; };
+const I_REFRESH = "M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z";
+const I_MORE = "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z";
+const I_CHEV = "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z";
 
-function ago(ms) {
-  const m = Math.round((Date.now() - ms) / MIN);
-  if (m < 1) return "just now";
-  if (m < 60) return m + " min ago";
-  const hr = Math.round(m / 60);
-  return hr < 36 ? hr + " hr ago" : Math.round(hr / 24) + " days ago";
-}
-function daysUntil(dateStr) {
-  const today = new Intl.DateTimeFormat("en-CA", {timeZone: TZ}).format(new Date());
-  return Math.round((dOnly(dateStr) - dOnly(today)) / DAY);
-}
-const time12 = iso => { let [hh, mm] = iso.slice(11, 16).split(":").map(Number); const ap = hh < 12 ? "AM" : "PM"; hh = hh % 12 || 12; return `${hh}:${String(mm).padStart(2, "0")} ${ap}`; };
-const dur = m => Math.floor(m / 60) + " hr" + (m % 60 ? " " + (m % 60) + " min" : "");
-const code = f => f.split(" ")[0];
-const isAny = f => !f || f === "any";
+const ago = ms => { const m = Math.round((Date.now() - ms) / MIN); if (m < 1) return "just now"; if (m < 60) return m + " min ago";
+  const hr = Math.round(m / 60); return hr < 36 ? hr + " hr ago" : Math.round(hr / 24) + " days ago"; };
+const daysUntil = d => Math.round((dOnly(d) - dOnly(new Intl.DateTimeFormat("en-CA", {timeZone: TZ}).format(new Date()))) / DAY);
+const hm = iso => iso.slice(11, 16);
+const dur = m => Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m";
 
-function logo(flight) {
-  const c = isAny(flight) ? "✈" : code(flight);
-  return h("span", {class: "logo", style: `background:${LOGO[c] || "#80868b"}`, "aria-hidden": "true"}, c);
+function logo(f) {
+  const c = isAny(f) ? "✈" : code(f);
+  return h("span", {class: "logo", style: `background:${LOGO[c] || "#807c75"}`, "aria-hidden": "true"}, c);
 }
-function legRow(l) {
-  const next = l.arr.slice(0, 10) > l.dep.slice(0, 10) ? " +1" : "";
-  return h("div", {class: "leg"}, logo(l.flight),
-    h("div", null, h("b", null, `${fDayMon.format(dOnly(l.dep.slice(0, 10)))} · ${time12(l.dep)} – ${time12(l.arr)}${next}`),
-      h("span", {class: "small"}, `${AIRLINES[code(l.flight)] || code(l.flight)} · ${l.flight}`)),
-    h("div", {class: "dur"}, h("b", {class: "num"}, dur(l.minutes)), h("span", {class: "small"}, `${l.from}–${l.to}`)),
-    h("div", {class: "stops"}, "Nonstop"));
-}
-function plainLeg(date, flight, from, to) {  // before the first check: what the watch itself says
-  return h("div", {class: "leg"}, logo(flight),
-    h("div", null, h("b", null, fDayMon.format(dOnly(date))),
-      h("span", {class: "small"}, isAny(flight) ? "Any direct flight" : `${AIRLINES[code(flight)] || code(flight)} · ${flight}`)),
-    h("div", {class: "dur"}, h("span", {class: "small"}, `${from}–${to}`)),
-    h("div", {class: "stops"}, "Nonstop"));
-}
-function legRows(w) {
-  if (w.current && w.current.legs && w.current.legs.length) return w.current.legs.map(legRow);
-  const fl = w.flights || [];
-  const rows = [plainLeg(w.depart, fl[0], w.from, w.to)];
-  if (w.return) rows.push(plainLeg(w.return, fl[1], w.to, w.from));
-  return rows;
-}
+const points = w => (w.points || []).map(([ts, p]) => [t(ts), p]).filter(p => p[1] != null);
+function valueAt(pts, x) { let v; for (const [ts, p] of pts) { if (ts <= x) v = p; else break; } return v; }
 
-function airlineTitle(w) {
-  const fl = (w.current && w.current.flights) || (w.flights || []).filter(f => !isAny(f));
-  const names = [...new Set(fl.map(f => AIRLINES[code(f)] || code(f)))];
-  return names.length ? names.join(" + ") : `${city(w.from)} to ${city(w.to)}`;
-}
-
-function priceBlock(w) {
+// ---- the headline: price, verdict, change, trend --------------------------------
+function verdict(w, pts) {
   const st = w.state || {};
-  if (st.last == null) return h("div", {class: "price-box"}, h("div", {class: "price-note"}, "Waiting for the first check"));
-  if (st.misses) return h("div", {class: "price-box"}, h("div", {class: "price num"}, inr(st.last)),
-    h("div", {class: "missing"}, "Not found on the last check"));
-  const prev = w.previous_price;
-  const dir = prev == null ? "" : st.last < prev ? "down" : "up";
-  return h("div", {class: "price-box"},
-    h("div", {class: "price num " + dir, "aria-label": `Now ${inr(st.last)}` + (prev != null ? `, was ${inr(prev)}` : "")},
-      dir === "down" ? "↓ " : dir === "up" ? "↑ " : "", inr(st.last)),
-    prev != null ? h("div", {class: "was num", "aria-hidden": "true"}, inr(prev)) : null);
+  if (st.last == null) return ["v-neutral", "Waiting for the first price check"];
+  if (st.misses) return ["v-up", "Not found on the last check"];
+  if (new Set(pts.map(p => p[1])).size < 2) return ["v-neutral", "Tracking started · no movement yet"];
+  if (st.last <= st.low) return ["v-down", "Lowest price we've seen"];
+  const day = valueAt(pts, Date.now() - DAY);
+  if (day != null && st.last - day >= Math.max(500, st.last * 0.03)) return ["v-up", `Rising · up ${inr(st.last - day)} in a day`];
+  return ["v-amber", `${inr(st.last - st.low)} above the lowest`];
+}
+function change(w, pts) {
+  const st = w.state || {};
+  if (st.last == null || pts.length < 2) return null;
+  const ref = valueAt(pts, Date.now() - DAY) ?? pts[0][1];
+  const d = st.last - ref;
+  if (Math.abs(d) < 1) return h("div", {class: "change flat"}, "No change today");
+  return h("div", {class: "change " + (d < 0 ? "down" : "up")}, (d < 0 ? "↓ " : "↑ ") + inr(Math.abs(d)) + " today");
+}
+function sparkline(pts) {
+  const now = Math.max(t(D.updated_at) || 0, pts.length ? pts[pts.length - 1][0] : 0);
+  const from = now - 30 * DAY;
+  let p = pts.filter(([ts]) => ts >= from);
+  const before = valueAt(pts, from);
+  if (before != null) p = [[from, before], ...p];
+  if (p.length < 2) return null;
+  const W = 132, H = 40, x0 = p[0][0], x1 = Math.max(now, x0 + 1);
+  let lo = Math.min(...p.map(q => q[1])), hi = Math.max(...p.map(q => q[1]));
+  if (hi - lo < 1) { lo -= 1; hi += 1; }
+  const X = x => 2 + (x - x0) / (x1 - x0) * (W - 8), Y = v => 4 + (1 - (v - lo) / (hi - lo)) * (H - 8);
+  let d = ""; p.forEach(([ts, v], i) => { d += i ? `H${X(ts)}V${Y(v)}` : `M${X(ts)},${Y(v)}`; }); d += `H${X(x1)}`;
+  const last = p[p.length - 1][1], first = p[0][1];
+  const col = last < first ? "var(--down)" : last > first ? "var(--up)" : "var(--ink-3)";
+  const svg = s("svg", {class: "spark", viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img",
+    "aria-label": `30-day trend from ${inr(first)} to ${inr(last)}`});
+  svg.append(s("path", {d, fill: "none", stroke: col, "stroke-width": 2, "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke"}),
+    s("circle", {cx: X(x1), cy: Y(last), r: 3, fill: col}));
+  return svg;
 }
 
-function choicesBlock(w) {
-  if (!w.choices || w.choices.length < 2) return null;
-  const i = Math.max(0, (w.flights || []).indexOf("any"));
-  const day = i === 1 ? w.return : w.depart;
-  const best = Math.min(...w.choices.map(c => c.price));
-  return h("div", {class: "choices"},
-    h("div", {class: "choices-head"}, `${i === 1 ? "Return" : "Departure"} options on ${fWkDayMon.format(dOnly(day))} · round-trip price`),
-    w.choices.map(c => {
-      const leg = (c.legs || [])[i], f = c.flights[i];
-      return h("div", {class: "choice" + (c.price === best ? " best" : "")}, logo(f),
-        h("div", null, h("b", null, leg ? `${time12(leg.dep)} – ${time12(leg.arr)}` : f),
-          h("span", {class: "small"}, `${AIRLINES[code(f)] || code(f)} · ${f}`)),
-        h("div", {class: "p num"}, inr(c.price), c.price === best ? h("small", null, "Cheapest") : null));
-    }));
+// ---- departure-board rows -----------------------------------------------------------
+function boardRow(dir, leg, fallbackDate, fallbackFlight, from, to) {
+  if (!leg) {
+    return h("div", {class: "board-row"}, h("div", {class: "dir"}, dir),
+      h("div", {class: "date t"}, fWDM.format(dOnly(fallbackDate))),
+      h("div", {class: "times t"}, h("span", {class: "mdate"}, fDM.format(dOnly(fallbackDate))), "—"),
+      h("div", {class: "flight"}, logo(fallbackFlight), h("div", {style: "min-width:0"},
+        h("div", {class: "code"}, isAny(fallbackFlight) ? "Any direct" : fallbackFlight.replace("|", " or ")),
+        h("div", {class: "name"}, `${from} → ${to}`))),
+      h("div", {class: "dur"}, h("b", null, "Direct")));
+  }
+  const next = leg.arr.slice(0, 10) > leg.dep.slice(0, 10);
+  const c = code(leg.flight);
+  return h("div", {class: "board-row"},
+    h("div", {class: "dir"}, dir),
+    h("div", {class: "date t"}, fWDM.format(dOnly(leg.dep.slice(0, 10)))),
+    h("div", {class: "times t"}, h("span", {class: "mdate"}, fDM.format(dOnly(leg.dep.slice(0, 10)))),
+      hm(leg.dep), h("span", {class: "arr"}, "→"), hm(leg.arr), next ? h("sup", null, "+1") : null),
+    h("div", {class: "flight"}, logo(leg.flight), h("div", {style: "min-width:0"},
+      h("div", {class: "code"}, leg.flight), h("div", {class: "name"}, `${AIR[c] || c} · ${leg.from} → ${leg.to}`))),
+    h("div", {class: "dur t"}, h("b", null, dur(leg.minutes)), h("span", null, "Direct")));
+}
+function board(w) {
+  const legs = (w.current && w.current.legs) || [];
+  const fl = w.flights || [];
+  const rows = [boardRow("OUT", legs[0], w.depart, fl[0], w.from, w.to)];
+  if (w.return) rows.push(boardRow("BACK", legs[1], w.return, fl[1], w.to, w.from));
+  return h("div", {class: "board"}, rows);
 }
 
-function historyChart(w) {
-  const pts = (w.points || []).map(([ts, p]) => [t(ts), p]).filter(p => p[1] != null);
+// ---- options: every acceptable combination (e.g. either outbound, any return) ----------
+function optionsBlock(w) {
+  const ch = w.choices || [];
+  if (ch.length < 2) return null;
+  const pattern = w.flights || [];
+  const preferred = f => pattern.some(p => p.includes("|") && p.split("|")[0] === f);
+  const best = Math.min(...ch.map(c => c.price));
+  const legCell = (leg, f, cls) => h("div", {class: "leg " + cls}, logo(f), h("div", {style: "min-width:0"},
+    h("b", {class: "t"}, leg ? `${hm(leg.dep)} → ${hm(leg.arr)}` : f),
+    h("small", null, `${f} · ${AIR[code(f)] || code(f)}`, preferred(f) ? h("span", {class: "pref"}, " · preferred") : null)));
+  const SHOW = 3;
+  const rows = ch.map((c, i) => h("div", {class: "opt" + (c.price === best ? " best" : ""), hidden: i >= SHOW},
+      legCell((c.legs || [])[0], c.flights[0], "out"), legCell((c.legs || [])[1], c.flights[1], "back"),
+      h("div", {class: "price num"}, inr(c.price), h("small", null, c.price === best ? "Cheapest" : "+" + inr(c.price - best)))));
+  const more = ch.length > SHOW ? h("button", {class: "show-all", type: "button", onclick: () => {
+      const showing = more.dataset.open === "1";
+      rows.forEach((r, i) => { if (i >= SHOW) r.hidden = showing; });
+      more.dataset.open = showing ? "0" : "1";
+      more.textContent = showing ? `Show all ${ch.length} options` : "Show fewer";
+    }}, `Show all ${ch.length} options`) : null;
+  return h("div", {class: "options"}, h("div", {class: "caps"}, "Your options · round-trip price"), rows, more);
+}
+function preferenceNote(w) {
+  const pattern = w.flights || [];
+  const i = pattern.findIndex(p => p.includes("|"));
+  if (i < 0 || !w.current || !w.choices || !w.choices.length) return null;
+  const pref = pattern[i].split("|")[0];
+  if (w.current.flights[i] === pref) return h("div", {class: "note"}, `Your preferred ${pref} is also the cheapest way.`);
+  const prefBest = Math.min(...w.choices.filter(c => c.flights[i] === pref).map(c => c.price));
+  if (!isFinite(prefBest)) return h("div", {class: "note"}, `Your preferred ${pref} wasn't found on the last check.`);
+  return h("div", {class: "note"}, `Cheapest is with ${w.current.flights[i]}. Your preferred ${pref} is ${inr(prefBest - w.current.price)} more (${inr(prefBest)}).`);
+}
+
+// ---- price history ------------------------------------------------------------------
+function chart(pts) {
   const wrap = h("div", {class: "chart"});
-  if (!pts.length) { wrap.append(h("p", {class: "small"}, "The graph fills in as prices are checked.")); return wrap; }
+  if (!pts.length) { wrap.append(h("p", {class: "checked"}, "The graph fills in as prices are checked.")); return wrap; }
+  const tip = h("div", {class: "tip", hidden: true}); wrap.append(tip);
   const end = Math.max(t(D.updated_at) || 0, pts[pts.length - 1][0]);
-  const tip = h("div", {class: "tip", hidden: true});
-  wrap.append(tip);
   const draw = () => {
     const old = wrap.querySelector("svg"); if (old) old.remove();
-    const W = wrap.clientWidth || 600, H = 180, ml = 46, mr = 8, mt = 22, mb = 22;
+    const W = wrap.clientWidth || 600, H = 190, ml = 44, mr = 6, mt = 24, mb = 22;
     const x0 = pts[0][0], x1 = Math.max(end, x0 + HOUR);
     let lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1]));
-    const pad = Math.max((hi - lo) * 0.15, hi * 0.02); lo -= pad; hi += pad;
+    const pad = Math.max((hi - lo) * 0.15, hi * 0.015); lo -= pad; hi += pad;
     const X = x => ml + (x - x0) / (x1 - x0) * (W - ml - mr), Y = v => mt + (1 - (v - lo) / (hi - lo)) * (H - mt - mb);
-    const svg = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img",
-      "aria-label": `Price history: started at ${inr(pts[0][1])}, now ${inr(pts[pts.length - 1][1])}`});
+    const svg = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `Price history from ${inr(pts[0][1])} to ${inr(pts[pts.length - 1][1])}`});
     for (const v of [lo + pad, (lo + hi) / 2, hi - pad]) {
-      svg.append(s("line", {x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), class: "grid"}));
-      svg.append(s("text", {x: ml - 6, y: Y(v) + 4, "text-anchor": "end", class: "tick"}, inrShort(v)));
+      svg.append(s("line", {x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), class: "grid"}),
+        s("text", {x: ml - 6, y: Y(v) + 4, "text-anchor": "end", class: "tick"}, inrK(v)));
     }
-    let d = "";
-    pts.forEach(([ts, p], k) => { d += k ? `H${X(ts)}V${Y(p)}` : `M${X(ts)},${Y(p)}`; });
-    d += `H${X(x1)}`;
-    svg.append(s("path", {d: d + `V${H - mb}H${X(x0)}Z`, fill: "var(--chart-fill)", stroke: "none"}));
-    svg.append(s("path", {d, fill: "none", stroke: "var(--chart)", "stroke-width": 2, "stroke-linejoin": "round"}));
-    svg.append(s("text", {x: ml, y: H - 4, class: "tick"}, fISTday.format(new Date(x0))));
-    svg.append(s("text", {x: W - mr, y: H - 4, "text-anchor": "end", class: "tick"}, "Now"));
+    let d = ""; pts.forEach(([ts, p], k) => { d += k ? `H${X(ts)}V${Y(p)}` : `M${X(ts)},${Y(p)}`; }); d += `H${X(x1)}`;
+    svg.append(s("path", {d: d + `V${H - mb}H${X(x0)}Z`, fill: "var(--navy-wash)"}),
+      s("path", {d, fill: "none", stroke: "var(--navy)", "stroke-width": 2, "stroke-linejoin": "round"}),
+      s("text", {x: ml, y: H - 4, class: "tick"}, fISTd.format(new Date(x0))),
+      s("text", {x: W - mr, y: H - 4, "text-anchor": "end", class: "tick"}, "Now"));
     const cross = s("line", {y1: mt, y2: H - mb, class: "cross", visibility: "hidden"});
-    const dot = s("circle", {r: 4.5, fill: "var(--chart)", stroke: "var(--card)", "stroke-width": 2, visibility: "hidden"});
+    const dot = s("circle", {r: 4.5, fill: "var(--navy)", stroke: "var(--panel)", "stroke-width": 2, visibility: "hidden"});
     svg.append(cross, dot);
     const move = ev => {
       const r = svg.getBoundingClientRect();
       const px = Math.max(ml, Math.min(W - mr, (ev.clientX - r.left) * W / r.width));
-      const x = x0 + (px - ml) / (W - ml - mr) * (x1 - x0);
-      let v = pts[0];
-      for (const p of pts) if (p[0] <= x) v = p;
+      const x = x0 + (px - ml) / (W - ml - mr) * (x1 - x0), v = valueAt(pts, x) ?? pts[0][1];
       cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("visibility", "visible");
-      dot.setAttribute("cx", px); dot.setAttribute("cy", Y(v[1])); dot.setAttribute("visibility", "visible");
-      tip.replaceChildren(h("b", null, inr(v[1])), " · " + fIST.format(new Date(x)));
-      tip.hidden = false;
-      const cx = px * r.width / W;
-      tip.style.left = Math.min(Math.max(0, cx - tip.offsetWidth / 2), r.width - tip.offsetWidth) + "px";
+      dot.setAttribute("cx", px); dot.setAttribute("cy", Y(v)); dot.setAttribute("visibility", "visible");
+      tip.replaceChildren(h("b", null, inr(v)), " · " + fIST.format(new Date(x))); tip.hidden = false;
+      const cx = px * r.width / W; tip.style.left = Math.min(Math.max(0, cx - tip.offsetWidth / 2), r.width - tip.offsetWidth) + "px";
     };
-    svg.addEventListener("pointermove", move);
-    svg.addEventListener("pointerdown", move);
+    svg.addEventListener("pointermove", move); svg.addEventListener("pointerdown", move);
     svg.addEventListener("pointerleave", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
     wrap.prepend(svg);
   };
@@ -336,74 +389,74 @@ function historyChart(w) {
   return wrap;
 }
 
-function card(w) {
-  const st = w.state || {};
-  const meta = [w.return ? "Round trip" : "One way", "Economy", "1 adult", "From " + city(w.from)].join(" · ");
-  const days = st.first_at ? Math.max(1, Math.round((Date.now() - t(st.first_at)) / DAY)) : 0;
-  const sum = st.low != null ? [`Lowest ${inr(st.low)}`, h("span", {class: "days"}, ` · tracking ${days} day${days === 1 ? "" : "s"}`)] : "";
+// ---- one fare (one card) ----------------------------------------------------------------
+function fare(w) {
+  const st = w.state || {}, pts = points(w);
+  const [vcls, vtext] = verdict(w, pts);
   const hist = h("div", {class: "history", hidden: true});
   let built = false;
-  const toggle = h("button", {class: "hist-toggle", type: "button", "aria-expanded": "false", onclick: () => {
-      const open = toggle.getAttribute("aria-expanded") !== "true";
-      toggle.setAttribute("aria-expanded", String(open));
-      hist.hidden = !open;
-      if (open && !built) {
-        built = true;
-        hist.append(historyChart(w), h("div", {class: "hist-facts"},
-          st.low != null ? h("span", null, "Lowest ", h("b", {class: "num"}, inr(st.low)), st.low_at ? " on " + fISTday.format(new Date(t(st.low_at))) : "") : null,
-          st.high != null ? h("span", null, "Highest ", h("b", {class: "num"}, inr(st.high))) : null,
-          st.first != null ? h("span", null, "When tracking started ", h("b", {class: "num"}, inr(st.first))) : null));
-      }
-    }},
-    h("span", {class: "chev"}, icon(ICON_CHEV)), h("span", {class: "label"}, "Price history"), h("span", {class: "sum"}, sum));
-  return h("article", {class: "card"},
-    h("div", {class: "card-top"},
-      h("div", null, h("div", {class: "airline"}, airlineTitle(w), w.who ? h("span", {class: "who"}, w.who) : null),
-        h("div", {class: "meta"}, meta)),
-      priceBlock(w)),
-    h("div", {class: "legs"}, legRows(w)),
-    choicesBlock(w),
-    toggle, hist,
-    h("div", {class: "card-foot"},
-      h("span", {class: "checked"}, w.checked_at ? "Checked " + ago(t(w.checked_at)) : "Not checked yet"),
-      h("a", {class: "book", href: w.link, target: "_blank", rel: "noopener noreferrer"}, "See booking options")));
+  const toggle = h("button", {class: "toggle", type: "button", "aria-expanded": "false", onclick: () => {
+    const open = toggle.getAttribute("aria-expanded") !== "true";
+    toggle.setAttribute("aria-expanded", String(open)); hist.hidden = !open;
+    if (open && !built) {
+      built = true;
+      hist.append(chart(pts), h("div", {class: "facts"},
+        h("div", {class: "fact"}, h("span", null, "Lowest"), h("b", {class: "num"}, inr(st.low)), h("span", null, st.low_at ? fISTd.format(new Date(t(st.low_at))) : "")),
+        h("div", {class: "fact"}, h("span", null, "Highest"), h("b", {class: "num"}, inr(st.high))),
+        h("div", {class: "fact"}, h("span", null, "When tracking began"), h("b", {class: "num"}, inr(st.first)), h("span", null, st.first_at ? fISTd.format(new Date(t(st.first_at))) : ""))));
+    }
+  }}, "Price history", icon(I_CHEV));
+  return h("article", {class: "fare"},
+    h("div", {class: "fare-head"},
+      h("div", null,
+        h("div", {class: "who"}, w.who ? h("span", {class: "tag"}, w.who) : null,
+          h("span", {class: "caps"}, `${w.return ? "Round trip" : "One way"} · from ${city(w.from)}`)),
+        h("div", {class: "big num"}, st.last != null ? inr(st.last) : "—"),
+        h("div", {class: "verdict " + vcls}, vtext)),
+      h("div", {class: "side"}, change(w, pts), sparkline(pts)),
+      preferenceNote(w)),
+    board(w),
+    optionsBlock(w),
+    h("div", {class: "more"},
+      h("div", null, toggle, h("div", {class: "checked"}, w.checked_at ? "Checked " + ago(t(w.checked_at)) : "Not checked yet")),
+      h("a", {class: "book", href: w.link, target: "_blank", rel: "noopener noreferrer"}, "Book ↗")),
+    hist);
 }
 
-function tripSection(trip) {
-  const ws = trip.watches.map(id => D.watches.find(w => w.id === id)).filter(Boolean);
-  const dest = ws.length ? ws[0].to : "";
-  const days = daysUntil(trip.start);
-  const when = (trip.start === trip.end ? fWkDayMonYr.format(dOnly(trip.start))
-    : fWkDayMon.format(dOnly(trip.start)) + " – " + fWkDayMonYr.format(dOnly(trip.end))) +
-    (days > 1 ? ` · in ${days} days` : days === 1 ? " · tomorrow" : days === 0 ? " · today" : "");
+function trip(tr) {
+  const ws = tr.watches.map(id => D.watches.find(w => w.id === id)).filter(Boolean);
+  const dest = ws.length ? ws[0].to : "", days = daysUntil(tr.start);
+  const route = [...new Set(ws.map(w => w.from))].join(" / ") + (ws.some(w => w.return) ? " ⇄ " : " → ") + dest;
+  const when = tr.start === tr.end ? fWDM.format(dOnly(tr.start))
+    : `${fW.format(dOnly(tr.start))} ${fDM.format(dOnly(tr.start))} – ${fW.format(dOnly(tr.end))} ${fDM.format(dOnly(tr.end))} ${dOnly(tr.end).getUTCFullYear()}`;
   return h("section", {class: "trip"},
-    h("div", {class: "trip-head"}, h("div", {class: "city", "aria-hidden": "true"}, dest),
-      h("div", null, h("h2", null, trip.name || city(dest)), h("div", {class: "dates"}, when))),
-    ws.map(card));
+    h("div", {class: "trip-head"},
+      h("div", null, h("div", {class: "caps"}, route), h("h2", null, tr.name || city(dest)), h("div", {class: "when"}, when)),
+      h("div", {class: "countdown"}, h("b", {class: "num"}, days > 0 ? days : days === 0 ? "Today" : "—"),
+        h("span", {class: "caps"}, days > 1 ? "days to go" : days === 1 ? "day to go" : ""))),
+    ws.map(fare));
 }
 
 function header() {
-  const sub = document.getElementById("sub");
+  const sub = document.getElementById("sub"), dotEl = document.getElementById("dot");
   const last = t(D.updated_at);
-  if (D.failed_runs > 0) {
-    sub.textContent = `Google didn't answer the last ${D.failed_runs} check${D.failed_runs === 1 ? "" : "s"} · retrying`;
-    sub.className = "sub warn";
-  } else if (!last) {
-    sub.textContent = "Waiting for the first price check"; sub.className = "sub";
-  } else {
+  let warn = false;
+  if (D.failed_runs > 0) { sub.textContent = `Google didn't answer the last ${D.failed_runs} check${D.failed_runs === 1 ? "" : "s"} · retrying`; warn = true; }
+  else if (!last) sub.textContent = "Waiting for the first price check";
+  else {
     const stale = Date.now() - last > 3 * (D.check_every_minutes || 30) * MIN;
-    sub.textContent = "Updated " + ago(last) + (stale ? " · checks seem to have stopped" : "");
-    sub.className = stale ? "sub warn" : "sub";
+    sub.textContent = stale ? `Last updated ${ago(last)} · checks seem to have stopped` : `Live · updated ${ago(last)}`;
+    warn = stale;
   }
+  dotEl.className = "dot" + (warn ? " warn" : "");
   const actions = document.getElementById("actions");
   actions.replaceChildren();
   if (D.web) {
-    const btn = h("button", {class: "icon-btn", type: "submit", "aria-label": "Check prices now", title: "Check prices now"}, icon(ICON_REFRESH));
+    const btn = h("button", {class: "icon-btn", type: "submit", "aria-label": "Check prices now", title: "Check prices now"}, icon(I_REFRESH));
     actions.append(
       h("form", {method: "post", action: D.web.check_now, style: "margin:0", onsubmit: () => {
-        btn.classList.add("spin"); btn.disabled = true;
-        sub.textContent = "Checking prices… this can take up to a minute"; sub.className = "sub"; }}, btn),
-      h("details", {class: "menu"}, h("summary", {class: "icon-btn", "aria-label": "Menu", title: "Menu"}, icon(ICON_MORE)),
+        btn.classList.add("spin"); btn.disabled = true; sub.textContent = "Checking prices… up to a minute"; }}, btn),
+      h("details", {class: "menu"}, h("summary", {class: "icon-btn", "aria-label": "Menu", title: "Menu"}, icon(I_MORE)),
         h("div", {class: "menu-pop"}, h("a", {href: D.web.setup}, "Setup"), h("a", {href: D.web.logout}, "Log out"))));
   }
   const notice = document.getElementById("notice");
@@ -412,14 +465,10 @@ function header() {
   if (text) notice.append(h("div", {class: "notice"}, text));
 }
 
-function render() {
-  header();
-  const trips = D.trips || [];
-  document.getElementById("trips").replaceChildren(...(trips.length ? trips.map(tripSection)
-    : [h("div", {class: "empty"}, "No flights tracked yet.")]));
-}
-render();
-setInterval(() => { if (!document.querySelector(".icon-btn.spin")) header(); }, MIN);
+header();
+document.getElementById("trips").replaceChildren(...((D.trips || []).length ? D.trips.map(trip)
+  : [h("div", {class: "empty"}, "No flights tracked yet.")]));
+setInterval(() => { if (!document.querySelector(".spin")) header(); }, MIN);
 </script>
 </body>
 </html>

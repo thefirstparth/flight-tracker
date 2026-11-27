@@ -164,9 +164,12 @@ ANY = "any"
 
 def normalize_flight(text: str) -> str:
     """'6e1457', '6E-1457', '6E 01457' -> '6E 1457'; 'any' or '*' -> 'any'
-    (any direct flight that way, cheapest wins)."""
+    (any direct flight that way, cheapest wins); '6E 1217 | QP 623' -> either
+    flight (the first one listed is the preferred one)."""
     if str(text).strip().lower() in (ANY, "*"):
         return ANY
+    if "|" in str(text):
+        return "|".join(normalize_flight(part) for part in str(text).split("|"))
     m = re.fullmatch(r"\s*([A-Za-z0-9]{2})\s*-?\s*(\d{1,5})\s*", str(text))
     if not m:
         raise ConfigError(f"flight {text!r} should look like '6E 1457'")
@@ -297,7 +300,8 @@ def _search_once(key: tuple, settings: dict, needed: set[tuple] = frozenset()) -
     client = SearchFlights()
     locale = dict(currency=settings["currency"], country="IN", language="en")
     if ret and hasattr(client, "_fetch_flights"):
-        results = _round_trip(client, filters, locale, {f[0] for f in needed if f[0] != ANY})
+        results = _round_trip(client, filters, locale,
+                              {part for f in needed if f[0] != ANY for part in f[0].split("|")})
     else:
         results = client.search(filters, top_n=ROUND_TRIP_OUTBOUND_OPTIONS, **locale) or []
     options = []
@@ -448,7 +452,7 @@ def fetch_options(key: tuple, settings: dict, needed: set[tuple], search=_search
 
 def matches(pattern: tuple[str, ...], flights: tuple[str, ...]) -> bool:
     """Do these flights fit a watch's flight list ('any' matches any flight)?"""
-    return len(pattern) == len(flights) and all(p == ANY or p == f for p, f in zip(pattern, flights))
+    return len(pattern) == len(flights) and all(p == ANY or f in p.split("|") for p, f in zip(pattern, flights))
 
 
 def all_found(patterns, found) -> bool:
@@ -586,7 +590,7 @@ def event_message(kind: str, info: dict, w: Watch, st: dict, option: Option | No
         body = f"Available again at {inr(price)}"
     elif kind == "missing":
         head = f"⚠️ NOT FOUND: {w.name}"
-        body = (f"{' + '.join('any direct' if f == ANY else f for f in w.flights or ())} has not appeared in the last {st.get('misses')} checks "
+        body = (f"{' + '.join('any direct' if f == ANY else f.replace('|', ' or ') for f in w.flights or ())} has not appeared in the last {st.get('misses')} checks "
                 "(sold out, schedule change, or no longer sold as a direct flight).")
         return "\n".join([head, body, link])
     else:
@@ -618,7 +622,7 @@ def summary_message(watches, state, history, now, title) -> str:
             change = " (no change in 24 h)" if abs(d) < 1 else f" ({'+' if d > 0 else '-'}{inr(abs(d))} in 24 h)"
         status = "  NOT FOUND on the last check" if st.get("misses") else ""
         lines.append(f"  {inr(st['last'])}{change} · low {inr(st['low'])} · high {inr(st['high'])}{status}")
-        if (not w.flights or ANY in w.flights) and st.get("last_flights"):
+        if (not w.flights or any(f == ANY or "|" in f for f in w.flights)) and st.get("last_flights"):
             if all(is_date(f) for f in st["last_flights"]):
                 lines.append(f"  cheapest dates: {' to '.join(st['last_flights'])}")
             else:

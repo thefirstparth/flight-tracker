@@ -109,7 +109,7 @@ def fake_options(key, settings, needed, **_):
     if ".." in depart:
         return [tracker.Option(20000, ("2027-01-17",), ("Sun 17 Jan",)),
                 tracker.Option(21000, ("2027-01-18",), ("Mon 18 Jan",))]
-    concrete = [tuple("ZZ 9" if x == tracker.ANY else x for x in f) for f in sorted(needed)]
+    concrete = [tuple("ZZ 9" if x == tracker.ANY else x.split("|")[0] for x in f) for f in sorted(needed)]
     opts = [tracker.Option(30000 + i, f, ("t",) * len(f)) for i, f in enumerate(concrete)]
     cheap = ("ZZ 1", "ZZ 2") if ret else ("ZZ 1",)
     return opts + [tracker.Option(10000, cheap, ("t",) * len(cheap))]
@@ -192,10 +192,12 @@ class CheckLoop(unittest.TestCase):
         _, watches = tracker.load_config(CONFIG)
         w = next(x for x in watches if x.flights and tracker.ANY in x.flights)
         opts = [tracker.Option(36661, ("QP 623", "IX 931"), ()), tracker.Option(39089, ("6E 1217", "IX 931"), ()),
-                tracker.Option(42850, ("6E 1217", "6E 1218"), ())]
-        self.assertEqual(tracker.pick(w, opts).flights, ("6E 1217", "IX 931"))  # Akasa out is not allowed
+                tracker.Option(42850, ("6E 1217", "6E 1218"), ()), tracker.Option(30000, ("AI 1", "IX 931"), ())]
+        self.assertEqual(tracker.pick(w, opts).flights, ("QP 623", "IX 931"))  # either outbound; Air India is not
+        self.assertEqual(len(tracker.matching_options(w, opts)), 3)
         self.assertTrue(tracker.all_found({w.flights}, [o.flights for o in opts]))
-        self.assertFalse(tracker.all_found({w.flights}, [("QP 623", "IX 931")]))
+        self.assertFalse(tracker.all_found({w.flights}, [("AI 1", "IX 931")]))
+        self.assertEqual(tracker.normalize_flight("6e1217 | qp 623"), "6E 1217|QP 623")
 
     def test_due_after_interval(self):
         now = datetime(2027, 1, 1, 12, 0, tzinfo=tracker.IST)

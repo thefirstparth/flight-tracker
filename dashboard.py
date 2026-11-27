@@ -85,8 +85,8 @@ def collect(config: Path, store) -> dict:
             "previous_price": prev,
             "current": {"price": current.price, "flights": list(current.flights), "legs": list(current.legs)}
             if current else None,
-            "choices": [{"price": o.price, "flights": list(o.flights), "legs": list(o.legs)} for o in fitting[:6]]
-            if w.flights and tracker.ANY in w.flights else [],
+            "choices": [{"price": o.price, "flights": list(o.flights), "legs": list(o.legs)} for o in fitting[:12]]
+            if w.flights and any(f == tracker.ANY or "|" in f for f in w.flights) else [],
             "checked_at": (state.get("searches", {}).get(w.search_id) or {}).get("checked_at"),
         })
         end = w.ret or w.depart_until or w.depart
@@ -175,7 +175,7 @@ DEMO_TIMES = {"6E 1457": ("10:20", "17:40", 290), "6E 1458": ("19:30", "21:40", 
               "6E 1207": ("19:15", "03:30", 345), "6E 1208": ("04:25", "07:35", 340),
               "6E 1217": ("06:20", "11:30", 220), "6E 1218": ("12:35", "14:35", 210),
               "QP 623": ("10:40", "15:50", 220), "QP 624": ("17:00", "19:10", 220),
-              "IX 931": ("12:40", "14:50", 220), "SQ 509": ("11:40", "18:50", 280),
+              "IX 931": ("12:40", "14:40", 210), "SQ 509": ("11:40", "18:50", 280),
               "AI 2381": ("08:00", "16:10", 340)}
 
 
@@ -199,7 +199,8 @@ DEMO_EXTRA_OPTIONS = {  # other direct flights Google would list, (flights, toda
                            (("AI 2381", "6E 1458"), 33410)],
     ("DEL", "SIN", True): [(("6E 1207", "6E 1208"), 28041)],
     ("BLR", "HKT", True): [(("6E 1217", "IX 931"), 39089), (("6E 1217", "6E 1218"), 42850),
-                           (("6E 1217", "QP 624"), 43964), (("QP 623", "IX 931"), 36661)],
+                           (("6E 1217", "QP 624"), 43964), (("QP 623", "IX 931"), 36661),
+                           (("QP 623", "6E 1218"), 40422), (("QP 623", "QP 624"), 41536)],
     ("BLR", "HKT", False): [(("6E 1217",), 18853)],
     ("HKT", "BLR", False): [(("IX 931",), 20493)],
 }
@@ -255,7 +256,8 @@ def demo_data(config: Path) -> dict:
             continue
         options = {o[0]: o[1] for o in DEMO_EXTRA_OPTIONS.get((w.origin, w.destination, bool(w.ret)), [])}
         for other in watches:
-            if other.search_id == w.search_id and other.flights and tracker.ANY not in other.flights:
+            if other.search_id == w.search_id and other.flights and \
+                    not any(f == tracker.ANY or "|" in f for f in other.flights):
                 options.setdefault(other.flights, DEMO_START_PRICES.get("/".join(other.flights), 25000))
         paths[w.search_id] = {fl: _walk(rng, n, price, shared) for fl, price in options.items()}
     # Akasa round trip vanishes for 8 hours, to show a "not found" gap.
@@ -270,7 +272,7 @@ def demo_data(config: Path) -> dict:
         opts = paths[w.search_id]
         st = None
         for i, ts in enumerate(checks):
-            if w.flights and tracker.ANY not in w.flights:
+            if w.flights and not any(f == tracker.ANY or "|" in f for f in w.flights):
                 pr, fl = opts.get(w.flights, [None] * n)[i], w.flights
             else:
                 avail = [(p[i], f) for f, p in opts.items()
