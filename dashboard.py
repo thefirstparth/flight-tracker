@@ -58,6 +58,7 @@ def collect(config: Path, store) -> dict:
         by_watch.setdefault(row["watch_id"], []).append(row)
 
     searches = latest.get("searches", {})
+    today = datetime.now(tracker.IST).date()
     trips: dict[str, dict] = {}
     out_watches = []
     for w in watches:
@@ -89,6 +90,9 @@ def collect(config: Path, store) -> dict:
             if w.flights and any(f == tracker.ANY or "|" in f for f in w.flights) else [],
             "checked_at": (state.get("searches", {}).get(w.search_id) or {}).get("checked_at"),
             "insights": (latest.get("insights") or {}).get(w.search_id),
+            "google": (latest.get("google") or {}).get(w.search_id),
+            "advice": tracker.book_or_wait((latest.get("google") or {}).get(w.search_id),
+                                           (latest.get("insights") or {}).get(w.search_id), w.depart, today),
         })
         end = w.ret or w.depart_until or w.depart
         t = trips.setdefault(w.trip, {"name": w.trip, "start": w.depart, "end": end, "watches": []})
@@ -226,6 +230,12 @@ def _walk(rng, n, base, shared):
     return out
 
 
+# Google's price insight as seen on 27 Nov 2026: (now, typical, range low, range high,
+# 60-day history low, high, number of days).
+DEMO_GOOGLE = {("BLR", "HKT", True): (43690, 26284, 22500, 37000, 34026, 48821, 61),
+               ("BLR", "SIN", True): (26576, 19106, 17000, 25500, 24000, 31000, 43),
+               ("DEL", "SIN", True): (29051, 32162, 26000, 49000, 28000, 36000, 62)}
+
 # Real cheapest-direct round-trip prices seen on 27 Nov 2026 for BLR-HKT 4-night trips.
 DEMO_HKT_FRIDAYS = {"2026-12-25": 64670, "2027-01-01": 35278, "2027-01-08": 29695, "2027-01-15": 61015,
                     "2027-01-22": 43690, "2027-01-29": 28337, "2027-02-05": 27752, "2027-02-12": 26962,
@@ -328,6 +338,23 @@ def demo_data(config: Path) -> dict:
                 key=lambda o: o["price"])}
     events.sort(key=lambda e: e["checked_at"])
 
+    google = {}
+    for w in watches:
+        real = DEMO_GOOGLE.get((w.origin, w.destination, bool(w.ret)))
+        if real and w.search_id not in google:
+            nowp, typical, low, high, lo_hist, hi_hist, npts = real
+            hist, price = [], hi_hist * 0.97
+            for i in range(npts):
+                day = (now - timedelta(days=npts - 1 - i)).date().isoformat()
+                price = min(hi_hist, max(lo_hist, price + rng.gauss(-40, 900)))
+                hist.append([day, float(round(price))])
+            hist[-1][1] = float(nowp)
+            google[w.search_id] = {"checked_at": now.isoformat(), "level": None, "now": float(nowp),
+                                   "typical": float(typical), "low": float(low), "high": float(high),
+                                   "history": hist, "suggestions": [
+                                       {"depart": "2027-01-20", "return": "2027-01-25", "price": 30991.0}]
+                                   if w.destination == "HKT" else []}
+
     insights = {}
     for w in watches:
         if w.flexible or w.search_id in insights:
@@ -342,7 +369,7 @@ def demo_data(config: Path) -> dict:
         fs.save_state({"watches": state, "failed_runs": 0, "updated_at": now.isoformat()})
         fs.add_history(history)
         fs.add_events(events)
-        fs.save_latest({"updated_at": now.isoformat(), "searches": searches, "insights": insights})
+        fs.save_latest({"updated_at": now.isoformat(), "searches": searches, "insights": insights, "google": google})
         data = collect(config, fs)
     data["demo"] = True
     return data

@@ -77,6 +77,54 @@ class Rules(unittest.TestCase):
         self.assertEqual(st["misses"], 0)
 
 
+class BookOrWait(unittest.TestCase):
+    from datetime import date as _d
+    TODAY = _d(2026, 11, 27)
+
+    def g(self, now, low=22500, high=37000, history=None):
+        hist = history if history is not None else [["2026-10-%02d" % (i + 1), 40000] for i in range(28)]
+        return {"now": now, "low": low, "high": high, "typical": 26000, "history": hist, "suggestions": []}
+
+    def test_below_range_and_near_low_says_book(self):
+        hist = [["d", 30000.0]] * 30
+        r = t.book_or_wait(self.g(21000, history=hist), None, "2027-03-02", self.TODAY)
+        self.assertEqual(r["verdict"], "book")
+
+    def test_far_above_range_with_time_says_wait(self):
+        hist = [["d", 30000.0]] * 30
+        r = t.book_or_wait(self.g(45000, history=hist), None, "2027-06-01", self.TODAY)
+        self.assertEqual(r["verdict"], "wait")
+        self.assertTrue(any("above Google's typical range" in x["text"] for x in r["reasons"]))
+
+    def test_peak_dates_and_closing_window_pull_toward_booking(self):
+        comparison = {"yours": 43690, "similar": [{"depart": d, "price": 29000} for d in
+                                                   ("2027-01-01", "2027-01-08", "2027-01-29", "2027-02-05")]}
+        r = t.book_or_wait(self.g(43690), comparison, "2027-01-22", self.TODAY)
+        self.assertTrue(any("peak" in x["text"] for x in r["reasons"]))
+        self.assertLessEqual(r["score"], 60)
+
+    def test_last_three_weeks(self):
+        r = t.book_or_wait(self.g(30000), None, "2026-12-10", self.TODAY)
+        self.assertTrue(any("last three weeks" in x["text"] for x in r["reasons"]))
+
+    def test_no_google_data_no_verdict(self):
+        self.assertIsNone(t.book_or_wait(None, None, "2027-01-22", self.TODAY))
+        self.assertIsNone(t.book_or_wait(self.g(30000), None, "2026-11-01", self.TODAY))  # departed
+
+    def test_parse_price_insight(self):
+        inner = [None] * 7
+        inner[5] = [5, [None, 43690], [None, 26284], [None, -17406], [None, 22500], [None, 37000], 1, None, None, None,
+                    [[[1790533800000, 41422], [1790620200000, 41441]]], None, "Phuket"]
+        inner[6] = [[["2027-01-20", "2027-01-25", [[None, 30991], "tok"], [2, 1]]]]
+        g = t.parse_price_insight(inner)
+        self.assertEqual((g["now"], g["low"], g["high"], g["typical"]), (43690, 22500, 37000, 26284))
+        self.assertEqual(len(g["history"]), 2)
+        self.assertEqual(g["suggestions"][0], {"depart": "2027-01-20", "return": "2027-01-25", "price": 30991.0})
+        self.assertIsNone(t.parse_price_insight([None] * 4))
+        bad = list(inner); bad[5] = [5, [None, 1], None, None, [None, 9], [None, 3]]
+        self.assertIsNone(t.parse_price_insight(bad))
+
+
 class Parsing(unittest.TestCase):
     def test_flight_normalization(self):
         for raw in ("6E 1457", "6e1457", "6E-1457", " 6E 01457 "):

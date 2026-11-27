@@ -81,10 +81,16 @@ Rules:
   verdict pill, today's change on the right with a 30-day trend line (green
   if lower than 30 days ago, red if higher, grey if flat). An optional one-line
   note sits underneath, e.g. how much more the preferred flight costs.
-- **Verdict pill** (pick one): "Lowest price we've seen" (green), "₹X above
+- **Verdict pill** (pick one): "Lowest since tracking began" (green), "₹X above
   the lowest" (amber), "Rising · up ₹X in a day" (red), "Tracking started · no
   movement yet" or "Waiting for the first price check" (neutral), "Not found
   on the last check" (red).
+- **Book or wait?** (under the price): verdict title in green (Good time to book),
+  amber (Fair time to book) or red (Wait for a better price), the strongest
+  reason, and a green–amber–red scale (40/20/40) with a knob at the score.
+  "Why?" opens every reason with a BOOK / WAIT / — tag, Google's last 60 days
+  for the dates with the typical range shaded green, and a one-line note on
+  how it is worked out. Never shown as a percentage or "accuracy".
 - **Board rows:** OUT / BACK label, weekday + date, times (mono), airline
   square + flight code (mono) + airline and route, duration, "Direct".
 - **Options:** every acceptable flight combination, cheapest first. Show 3,
@@ -112,6 +118,7 @@ Rules:
 ## 7. Do and don't
 
 - ✅ Keep one theme. ✅ Keep every price next to its context.
+- ✅ Say what advice is based on; call it a guide, not a prediction.
 - ✅ Use step lines for price history. ✅ Hide details behind a tap.
 - ✅ Insert all text as text (never as HTML), and load nothing from other sites.
 - ❌ No dark mode, no neon, no gradients for decoration.

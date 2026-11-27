@@ -18,6 +18,16 @@ These use the cheapest direct round trip on any airline for each date pair
 (Google's date grid), which is the right yardstick for "what does this trip
 cost", not your exact flights.
 
+**Book or wait?** Each card also shows a verdict (Good time to book / Fair
+time to book / Wait for a better price) on a green–amber–red scale, with the
+reasons on tap. It is a transparent guide, not a forecast model, built from:
+Google Flights' own typical price range for the trip (based on its last 12
+months), Google's last 60 days of prices for your dates (both read from the
+same Google answer as the flight prices, so no extra requests), whether your
+dates are a peak compared with other weeks, and the days left before
+departure (fares are lowest on average about 54–78 days out). Google's own
+"cheaper dates" suggestion appears under Compare dates.
+
 Prices come from Google Flights through the open-source
 [`flights`](https://github.com/punitarani/fli) library, so they are the same
 prices Google shows. Always confirm on the airline's site before booking.

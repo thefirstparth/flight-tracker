@@ -284,6 +284,78 @@ def _tune_library() -> None:
         log(f"(could not tune the flights library: {type(e).__name__})")
 
 
+# Google's own price insight for a search (typical range, 60-day history,
+# cheaper-date suggestion), captured from the same answer as the flights.
+_google_insights: dict[tuple, dict] = {}
+
+
+def parse_price_insight(inner) -> dict | None:
+    """Read Google's price-insight block from a shopping answer.
+
+    Layout seen in Nov 2026 (not documented by Google; checked defensively):
+    inner[5] = [level, [_, now], [_, typical], [_, typical - now], [_, range low],
+                [_, range high], ..., [[[timestamp_ms, price], ...]] at index 10]
+    inner[6] = [[[depart, return or None, [[_, price], token], ...], ...]]  (cheaper dates)
+    """
+    def num(x):
+        return x[1] if isinstance(x, list) and len(x) > 1 and isinstance(x[1], (int, float)) else None
+    try:
+        b = inner[5]
+        if not isinstance(b, list) or len(b) < 6:
+            return None
+        now, typical, low, high = num(b[1]), num(b[2]), num(b[4]), num(b[5])
+        if not (now and low and high and 0 < low <= high):
+            return None
+        history = []
+        raw = b[10] if len(b) > 10 and isinstance(b[10], list) else []
+        if raw and isinstance(raw[0], list) and raw[0] and isinstance(raw[0][0], list):
+            raw = raw[0]
+        for point in raw:
+            if isinstance(point, list) and len(point) == 2 and all(isinstance(v, (int, float)) for v in point):
+                day = datetime.fromtimestamp(point[0] / 1000, IST).date().isoformat()
+                history.append([day, float(point[1])])
+        suggestions = []
+        for item in (inner[6] or [[]])[0] if len(inner) > 6 and isinstance(inner[6], list) else []:
+            if isinstance(item, list) and len(item) > 2 and isinstance(item[0], str):
+                price = num(item[2][0]) if isinstance(item[2], list) and item[2] else None
+                if price:
+                    suggestions.append({"depart": item[0], "return": item[1], "price": float(price)})
+        return {"level": b[0] if isinstance(b[0], int) else None, "now": float(now),
+                "typical": float(typical) if typical else None, "low": float(low), "high": float(high),
+                "history": history, "suggestions": suggestions}
+    except (IndexError, TypeError, ValueError):
+        return None
+
+
+def _shopping(client, filters, locale: dict, key: tuple | None = None):
+    """One Google Flights shopping request: the flights, and (kept aside under
+    `key`) Google's price insight from the same answer."""
+    try:
+        from fli.search._decoders import parse_flight_row
+        from fli.search._urls import with_locale_params
+        from fli.search._wire import parse_first_wrb_payload
+    except ImportError:  # library changed: flights only
+        return client._fetch_flights(filters, capture_session=True, **locale)
+    url = with_locale_params(client.BASE_URL, locale.get("currency"), locale.get("language"), locale.get("country"))
+    response = client.client.post(url=url, data=f"f.req={filters.encode()}", impersonate="chrome", allow_redirects=True)
+    response.raise_for_status()
+    inner = parse_first_wrb_payload(response.text)
+    if not inner:
+        return None
+    rows = [item for i in (2, 3) if len(inner) > i and isinstance(inner[i], list) for item in inner[i][0]]
+    flights = []
+    for row in rows:
+        try:
+            flights.append(parse_flight_row(row))
+        except (AttributeError, KeyError, ValueError, TypeError):
+            continue
+    if flights and key is not None:
+        insight = parse_price_insight(inner)
+        if insight:
+            _google_insights[key] = insight
+    return flights or None
+
+
 def _search_once(key: tuple, settings: dict, needed: set[tuple] = frozenset()) -> list[Option]:
     _tune_library()
     from fli.core.builders import build_flight_segments
@@ -308,7 +380,9 @@ def _search_once(key: tuple, settings: dict, needed: set[tuple] = frozenset()) -
     locale = dict(currency=settings["currency"], country="IN", language="en")
     if ret and hasattr(client, "_fetch_flights"):
         results = _round_trip(client, filters, locale,
-                              {part for f in needed if f[0] != ANY for part in f[0].split("|")})
+                              {part for f in needed if f[0] != ANY for part in f[0].split("|")}, key)
+    elif hasattr(client, "_fetch_flights"):
+        results = _shopping(client, filters, locale, key) or []
     else:
         results = client.search(filters, top_n=ROUND_TRIP_OUTBOUND_OPTIONS, **locale) or []
     options = []
@@ -393,7 +467,7 @@ def _with_retries(fn, what: str):
     return None
 
 
-def _round_trip(client, filters, locale, watched_outbound: set[str]) -> list[tuple]:
+def _round_trip(client, filters, locale, watched_outbound: set[str], key: tuple | None = None) -> list[tuple]:
     """Price round trips one outbound flight at a time.
 
     The library prices returns for all outbound flights in parallel and
@@ -405,8 +479,7 @@ def _round_trip(client, filters, locale, watched_outbound: set[str]) -> list[tup
     """
     from copy import deepcopy
 
-    outbound = _with_retries(lambda: client._fetch_flights(filters, capture_session=True, **locale),
-                             "outbound list") or []
+    outbound = _with_retries(lambda: _shopping(client, filters, locale, key), "outbound list") or []
     def code(ob):
         return " + ".join(_flight_code(leg) for leg in ob.legs)
     by_price = sorted(outbound, key=lambda ob: ob.price if ob.price is not None else float("inf"))
@@ -794,6 +867,7 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
 
     results: dict[tuple, list[Option] | None] = {}
     incomplete: set[tuple] = set()
+    google: dict[str, dict] = {}  # Google's price insight per search, from this run
     for i, key in enumerate(due):
         if out_of_time():
             log("Run time budget used up; the remaining searches wait for the next run.")
@@ -802,7 +876,10 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
         log(f"Searching direct {origin}->{destination} {depart}" + (f" return {ret}" if ret else ""))
         if i:
             time.sleep(PAUSE_BETWEEN_SEARCHES)
+        _google_insights.pop(key, None)
         results[key] = fetch_options(key, settings, needed[key])
+        if key in _google_insights:
+            google[search_id(key)] = {"checked_at": now, **_google_insights.pop(key)}
         found = {o.flights for o in results[key] or []}
         if results[key] is not None and out_of_time() and not all_found(needed[key], found):
             # Cut short by the time budget: watched flights may simply not have
@@ -911,7 +988,7 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
         store.add_history(history_rows)
         store.add_events(event_rows)
         if any(v is not None for v in results.values()) or insights is not None:
-            save_latest(store, results, now, insights)
+            save_latest(store, results, now, insights, google, {search_id(w.search_key) for w in active})
         if dashboard_out:
             dashboard_path = build_dashboard_safely(Path(config), store, dashboard_out)
 
@@ -994,6 +1071,103 @@ def trip_insights(w: Watch, settings: dict, today: date, grid_fn=None) -> dict |
     return {"days": days, "yours": yours, "similar": similar, "nearby": nearby}
 
 
+def _median(values: list[float]) -> float | None:
+    v = sorted(values)
+    n = len(v)
+    return None if not n else (v[n // 2] if n % 2 else (v[n // 2 - 1] + v[n // 2]) / 2)
+
+
+def book_or_wait(google: dict | None, comparison: dict | None, depart: str, today: date) -> dict | None:
+    """A transparent book-or-wait verdict (dashboard only).
+
+    Not a forecast model: a score from 0 (book now) to 100 (waiting looks
+    worthwhile) built from four signals, each returned as a plain reason:
+    Google's typical range for the trip (12 months of route history), Google's
+    last 60 days of prices, whether the dates are a peak compared with the same
+    trip in other weeks, and the days left before departure.
+    """
+    if not google:
+        return None
+    days = (date.fromisoformat(depart) - today).days
+    if days < 0:
+        return None
+    now, low, high = google["now"], google["low"], google["high"]
+    score = 50.0
+    reasons: list[dict] = []
+
+    def add(points: float, text: str) -> None:
+        nonlocal score
+        score += points
+        reasons.append({"text": text, "points": round(points),
+                        "toward": "wait" if points > 0 else "book" if points < 0 else "neutral"})
+
+    # Peak dates first: if the dates are a holiday or long weekend, "above the
+    # typical range" is largely that same fact, so it counts for less.
+    peak_pct = None
+    if comparison and comparison.get("yours") and comparison.get("similar"):
+        others = [x["price"] for x in comparison["similar"] if x["depart"] != depart and x.get("price")]
+        typical_week = _median(others)
+        if len(others) >= 3 and typical_week:
+            pct = (comparison["yours"] - typical_week) / typical_week
+            if pct >= 0.25:
+                peak_pct = pct
+
+    span = f"{inr(low)}–{inr(high)}"
+    if now < low:
+        add(-25, f"{inr(now)} is below Google's typical range for this trip ({span}).")
+    elif now > high:
+        points = 20 + min(10, (now - high) / high * 50)
+        if peak_pct is not None:
+            add(points / 2, f"{inr(now)} is above Google's typical range for this trip ({span}), "
+                            "largely because of the peak dates.")
+        else:
+            add(points, f"{inr(now)} is above Google's typical range for this trip ({span}).")
+    else:
+        pos = (now - low) / (high - low) if high > low else 0.5
+        part = "lower" if pos < 0.34 else "middle" if pos < 0.67 else "upper"
+        add((pos - 0.5) * 30, f"{inr(now)} is in the {part} part of Google's typical range ({span}).")
+
+    hist = [price for _, price in google.get("history") or []]
+    if len(hist) >= 14:
+        share_below = sum(1 for price in hist if price < now) / len(hist)
+        if share_below <= 0.10:
+            add(-15, f"Close to the lowest of the last {len(hist)} days ({inr(min(hist))}).")
+        elif share_below >= 0.75:
+            add(10, f"Higher than on {round(share_below * 100)}% of the last {len(hist)} days (lowest {inr(min(hist))}).")
+        if len(hist) >= 8 and hist[-8]:
+            change = (now - hist[-8]) / hist[-8]
+            if change >= 0.05:
+                add(-8, f"Up {round(change * 100)}% in the past week; rising fares often keep rising as the date nears.")
+            elif change <= -0.05:
+                add(8, f"Down {round(-change * 100)}% in the past week; the fall may continue.")
+
+    if peak_pct is not None:
+        add(-12, f"Your dates cost {round(peak_pct * 100)}% more than the same trip in other weeks: a peak "
+                 "(holiday or long weekend), and peak dates rarely get cheaper closer in.")
+
+    if days < 21:
+        add(-25, f"{days} days to go: fares usually rise in the last three weeks.")
+    elif days < 54:
+        add(-10, f"{days} days to go: on average fares are lowest about 54–78 days before departure, "
+                 "so that window is closing.")
+    elif days <= 90:
+        add(0, f"{days} days to go: inside the usual cheapest window (about 54–78 days before departure).")
+    else:
+        add(10, f"{days} days to go: plenty of time for a lower fare to show up.")
+
+    score = max(0, min(100, round(score)))
+    if score < 40:
+        verdict, title = "book", "Good time to book"
+    elif score <= 60:
+        verdict, title = "fair", "Fair time to book"
+    else:
+        verdict, title = "wait", "Wait for a better price"
+    top = sorted((r for r in reasons if r["points"]), key=lambda r: -abs(r["points"]))
+    return {"score": score, "verdict": verdict, "title": title, "reasons": reasons,
+            "summary": top[0]["text"] if top else reasons[0]["text"],
+            "range": [low, high], "now": now, "days": days}
+
+
 def refresh_insights(active: list[Watch], settings: dict, store, now_dt: datetime) -> dict:
     """Recompute comparisons older than insights_every_hours, while the run's
     time budget lasts. Returns the full current set (old ones kept on failure)."""
@@ -1039,7 +1213,8 @@ def run(args) -> int:
     return report["exit_code"]
 
 
-def save_latest(store, results: dict, now: str, insights: dict | None = None) -> None:
+def save_latest(store, results: dict, now: str, insights: dict | None = None,
+                google: dict | None = None, keep: set[str] | None = None) -> None:
     """Every direct option per search at its latest successful check, plus
     the latest date comparisons."""
     latest = store.load_latest()
@@ -1051,8 +1226,11 @@ def save_latest(store, results: dict, now: str, insights: dict | None = None) ->
             "checked_at": now,
             "options": [{"price": o.price, "flights": list(o.flights), "legs": list(o.legs)} for o in options],
         }
+    merged_google = {k: v for k, v in (latest.get("google") or {}).items() if keep is None or k in keep}
+    merged_google.update(google or {})
     store.save_latest({"updated_at": now, "searches": searches,
-                       "insights": insights if insights is not None else latest.get("insights", {})})
+                       "insights": insights if insights is not None else latest.get("insights", {}),
+                       "google": merged_google})
 
 
 def build_dashboard_safely(config: Path, store, out: Path) -> Path | None:
