@@ -95,6 +95,13 @@ DEFAULT_SETTINGS = {
     "missing_checks_alert": 3,
     "send_dashboard": True,  # attach the dashboard file to summaries (file mode only)
     "check_every_minutes": 30,  # how often each watch is refreshed
+    # Telegram/email only for these (price changes on tracked flights). Also
+    # possible: "missing", "back", "broken" (tracker not getting prices), "started".
+    "alerts": ["drop", "rise", "target"],
+    "daily_summary": False,
+    # Dashboard-only comparisons: similar trips within +/- 30 days and +/- 1 day.
+    "insights": True,
+    "insights_every_hours": 12,
 }
 
 
@@ -317,7 +324,7 @@ def _search_once(key: tuple, settings: dict, needed: set[tuple] = frozenset()) -
         options.append(Option(
             price=float(price),
             flights=tuple(_flight_code(leg) for leg in legs),
-            times=tuple(leg.departure_datetime.strftime("%-d %b %H:%M") for leg in legs),
+            times=tuple(leg.departure_datetime.strftime("%a %-d %b %H:%M") for leg in legs),
             legs=tuple({
                 "flight": _flight_code(leg),
                 "airline": AIRLINE_NAMES.get(_flight_code(leg).split()[0], ""),
@@ -817,7 +824,7 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
         log(f"No prices at all this check ({state['failed_runs']} in a row).")
         if state["failed_runs"] == BROKEN_RUNS_ALERT:
             messages.append(
-                f"🛑 Flight tracker: no prices from Google Flights for {BROKEN_RUNS_ALERT} checks in a row. "
+                "broken:" f"🛑 Flight tracker: no prices from Google Flights for {BROKEN_RUNS_ALERT} checks in a row. "
                 "Google may have changed something; the 'flights' library may need an update "
                 "(edit requirements.txt). Your Google Flights alerts still work meanwhile.")
         if state["failed_runs"] >= BROKEN_RUNS_ALERT:
@@ -858,10 +865,10 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
                 "reference": f"{info['ref']:.0f}" if "ref" in info else ""})
             if kind == "baseline":
                 if not starting_up:
-                    messages.append(f"👀 Now watching: {w.name}\n{inr(st['last'])} · "
+                    messages.append("started:" + f"👀 Now watching: {w.name}\n{inr(st['last'])} · "
                                     f"{describe_flights(option.flights, option.times)}\n{google_link(w, option)}")
                 continue
-            messages.append(event_message(kind, info, w, st, option))
+            messages.append(kind + ":" + event_message(kind, info, w, st, option))
 
     known = {w.id for w in watches}
     for wid in [k for k in wstate if k not in known]:
@@ -871,12 +878,28 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
         (all("last" in wstate.get(w.id, {}) for w in active) or not starting_up)
     if first_run:
         state["overview_sent"] = True
+    summary = summary and settings["daily_summary"]
     if first_run or summary:
         stamp = now_dt.strftime("%-d %b %Y, %H:%M IST")
         title = "✈️ Flight tracker started. Current direct prices:" if first_run and not summary \
             else f"✈️ Daily flight price summary ({stamp})"
         history = store.load_history()
-        messages.append(summary_message(active, wstate, history, now_dt, title))
+        messages.append(("summary:" if summary else "started:") + summary_message(active, wstate, history, now_dt, title))
+
+    # Dashboard-only comparisons, after the prices and only while time remains.
+    insights = None
+    if settings["insights"] and not dry_run:
+        insights = refresh_insights(active, settings, store, now_dt)
+
+    allowed = set(settings["alerts"]) | ({"summary"} if summary else set())
+    kept = []
+    for m in messages:
+        kind, _, text = m.partition(":")
+        if kind in allowed:
+            kept.append(text)
+        else:
+            log(f"(not sent: '{kind}' alerts are off) {text.splitlines()[0]}")
+    messages = kept
 
     dashboard_path = None
     if dry_run:
@@ -887,8 +910,8 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
         store.save_state(state)
         store.add_history(history_rows)
         store.add_events(event_rows)
-        if any(v is not None for v in results.values()):
-            save_latest(store, results, now)
+        if any(v is not None for v in results.values()) or insights is not None:
+            save_latest(store, results, now, insights)
         if dashboard_out:
             dashboard_path = build_dashboard_safely(Path(config), store, dashboard_out)
 
@@ -899,6 +922,110 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
     if not messages:
         log("\nNo alerts this time.")
     return report
+
+
+# --------------------------------------------------------------------------
+# Date comparisons (dashboard only)
+# --------------------------------------------------------------------------
+
+def _date_grid(origin: str, destination: str, start: date, end: date, days: int | None,
+               settings: dict) -> dict[tuple, float]:
+    """Cheapest direct price per departure day (and return day) from Google's date grid."""
+    key = (origin, destination, f"{start.isoformat()}..{end.isoformat()}", f"{days}d" if days else None)
+    rows = _with_retries(lambda: _search_dates(key, settings),
+                         f"date grid {origin}-{destination} {start}..{end}" + (f" {days}d" if days else "")) or []
+    return {o.flights: o.price for o in rows}
+
+
+def trip_insights(w: Watch, settings: dict, today: date, grid_fn=None) -> dict | None:
+    """How a watch's dates compare: the same trip on the same weekday within
+    30 days either side, and leaving or returning one day earlier or later.
+    Prices are the cheapest direct option on any airline for each date pair."""
+    grid_fn = grid_fn or _date_grid
+    dep = date.fromisoformat(w.depart)
+    ret = date.fromisoformat(w.ret) if w.ret else None
+    days = (ret - dep).days if ret else None
+    first_day = today + timedelta(days=1)
+    start, end = max(dep - timedelta(days=30), first_day), dep + timedelta(days=30)
+    if end < first_day:
+        return None
+    grid = grid_fn(w.origin, w.destination, start, end, days, settings)
+    if not grid:
+        return None
+
+    def pair(d, r):
+        return (d.isoformat(),) + ((r.isoformat(),) if r else ())
+    similar = []
+    for dates, price in sorted(grid.items()):
+        if date.fromisoformat(dates[0]).weekday() == dep.weekday():
+            similar.append({"depart": dates[0], "return": dates[1] if len(dates) > 1 else None, "price": price})
+    wanted: dict = {}
+    for dd in (-1, 0, 1):
+        for rr in ((-1, 0, 1) if ret else (None,)):
+            d = dep + timedelta(days=dd)
+            r = ret + timedelta(days=rr) if ret else None
+            if d < first_day or (r and r <= d):
+                continue
+            wanted.setdefault((r - d).days if r else None, []).append((d, r))
+    nearby = []
+    for length, pairs in wanted.items():
+        if length == days:
+            g = grid
+        elif out_of_time():
+            g = {}
+        else:
+            g = grid_fn(w.origin, w.destination, min(d for d, _ in pairs), max(d for d, _ in pairs), length, settings)
+        for d, r in pairs:
+            nearby.append({"depart": d.isoformat(), "return": r.isoformat() if r else None,
+                           "price": g.get(pair(d, r))})
+    nearby.sort(key=lambda x: (x["depart"], x["return"] or ""))
+    yours = grid.get(pair(dep, ret))
+    # Google's date grid occasionally returns a nonsense price (e.g. ₹413 for an
+    # international round trip): drop anything under a quarter of the median.
+    known = sorted(x["price"] for x in similar + nearby if x["price"])
+    if known:
+        floor = known[len(known) // 2] * 0.25
+        for x in similar + nearby:
+            if x["price"] is not None and x["price"] < floor:
+                x["price"] = None
+        similar = [x for x in similar if x["price"] is not None]
+        if yours is not None and yours < floor:
+            yours = None
+    return {"days": days, "yours": yours, "similar": similar, "nearby": nearby}
+
+
+def refresh_insights(active: list[Watch], settings: dict, store, now_dt: datetime) -> dict:
+    """Recompute comparisons older than insights_every_hours, while the run's
+    time budget lasts. Returns the full current set (old ones kept on failure)."""
+    current = dict(store.load_latest().get("insights", {}))
+    wanted = {}
+    for w in active:
+        if not w.flexible:
+            wanted.setdefault(w.search_id, w)
+    for sid in [k for k in current if k not in wanted]:
+        del current[sid]
+    max_age = settings["insights_every_hours"] * 3600
+    for sid, w in wanted.items():
+        info = current.get(sid) or {}
+        stamp = info.get("checked_at") if info.get("ok") else info.get("failed_at")
+        if stamp and (now_dt - datetime.fromisoformat(stamp)).total_seconds() < (max_age if info.get("ok") else 3600):
+            continue  # fresh enough (or failed less than an hour ago)
+        if out_of_time():
+            log("Date comparisons wait for the next run (time budget used).")
+            break
+        log(f"Comparing dates for {w.origin}->{w.destination} {w.depart}" + (f" to {w.ret}" if w.ret else ""))
+        try:
+            result = trip_insights(w, settings, now_dt.date())
+        except ConfigError:
+            raise
+        except Exception as e:
+            log(f"  date comparison failed: {type(e).__name__}: {e}")
+            result = None
+        if result:
+            current[sid] = {"checked_at": now_dt.isoformat(), "ok": True, **result}
+        else:
+            current[sid] = {**info, "ok": False, "failed_at": now_dt.isoformat()}  # keep the last good numbers
+    return current
 
 
 def run(args) -> int:
@@ -912,9 +1039,11 @@ def run(args) -> int:
     return report["exit_code"]
 
 
-def save_latest(store, results: dict, now: str) -> None:
-    """Every direct option per search at its latest successful check."""
-    searches = store.load_latest().get("searches", {})
+def save_latest(store, results: dict, now: str, insights: dict | None = None) -> None:
+    """Every direct option per search at its latest successful check, plus
+    the latest date comparisons."""
+    latest = store.load_latest()
+    searches = latest.get("searches", {})
     for key, options in results.items():
         if options is None:
             continue  # keep the previous snapshot for searches Google did not answer
@@ -922,7 +1051,8 @@ def save_latest(store, results: dict, now: str) -> None:
             "checked_at": now,
             "options": [{"price": o.price, "flights": list(o.flights), "legs": list(o.legs)} for o in options],
         }
-    store.save_latest({"updated_at": now, "searches": searches})
+    store.save_latest({"updated_at": now, "searches": searches,
+                       "insights": insights if insights is not None else latest.get("insights", {})})
 
 
 def build_dashboard_safely(config: Path, store, out: Path) -> Path | None:

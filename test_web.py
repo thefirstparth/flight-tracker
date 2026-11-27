@@ -115,9 +115,26 @@ def fake_options(key, settings, needed, **_):
     return opts + [tracker.Option(10000, cheap, ("t",) * len(cheap))]
 
 
+def fake_grid(origin, destination, start, end, days, settings):
+    """Made-up date grid: Fridays cost 30000, other days 25000, plus 100 per day of trip length."""
+    out, d = {}, start
+    while d <= end:
+        r = d + timedelta(days=days) if days else None
+        key = (d.isoformat(),) + ((r.isoformat(),) if r else ())
+        out[key] = (30000 if d.weekday() == 4 else 25000) + 100 * (days or 0)
+        d += timedelta(days=1)
+    return out
+
+
 class CheckLoop(unittest.TestCase):
     def setUp(self):
         self.store = redis()
+        g = mock.patch.object(tracker, "_date_grid", side_effect=fake_grid)
+        g.start()
+        self.addCleanup(g.stop)
+        a = mock.patch.dict(tracker.DEFAULT_SETTINGS, {"alerts": ["drop", "rise", "target", "started", "broken"]})
+        a.start()
+        self.addCleanup(a.stop)
         p = mock.patch.object(tracker, "fetch_options", side_effect=fake_options)
         p.start()
         self.addCleanup(p.stop)
@@ -180,6 +197,43 @@ class CheckLoop(unittest.TestCase):
         exact = "bengaluru-singapore-indigo-6e-1457-6e-1458"
         self.assertNotIn(exact, state["watches"])  # not marked as a miss
         self.assertFalse(state["searches"]["BLR|SIN|2027-03-02|2027-03-07"]["ok"])  # retried next run
+
+    def test_default_alerts_are_price_changes_only(self):
+        with mock.patch.dict(tracker.DEFAULT_SETTINGS, {"alerts": ["drop", "rise", "target"]}):
+            tracker.check(CONFIG, self.store)  # first prices: no "started" message
+            self.send.assert_not_called()
+            state = self.store.load_state()
+            for info in state["searches"].values():
+                info["checked_at"] = "2000-01-01T00:00:00+05:30"  # make everything due again
+            self.store.save_state(state)
+            cheaper = lambda key, settings, needed, **kw: [  # noqa: E731
+                tracker.Option(o.price - 2000, o.flights, o.times) for o in fake_options(key, settings, needed)]
+            with mock.patch.object(tracker, "fetch_options", side_effect=cheaper):
+                tracker.check(CONFIG, self.store)
+        sent = self.send.call_args[0][0]
+        self.assertIn("PRICE DROP", sent)
+        self.assertNotIn("started", sent)
+
+    def test_insights_saved_for_dashboard(self):
+        tracker.check(CONFIG, self.store)
+        ins = self.store.load_latest()["insights"]["BLR|HKT|2027-01-22|2027-01-26"]
+        self.assertTrue(ins["ok"])
+        self.assertEqual(ins["days"], 4)
+        self.assertTrue(all(datetime.fromisoformat(x["depart"]).weekday() == 4 for x in ins["similar"]))  # Fridays
+        self.assertEqual(len(ins["nearby"]), 9)  # Thu/Fri/Sat x Mon/Tue/Wed
+        self.assertEqual(ins["yours"], 30400)
+
+    def test_insights_drop_nonsense_prices(self):
+        def glitchy(origin, destination, start, end, days, settings):
+            out = fake_grid(origin, destination, start, end, days, settings)
+            if days == 2:  # e.g. Sat -> Mon
+                out = {k: 413 for k in out}
+            return out
+        _, watches = tracker.load_config(CONFIG)
+        w = next(x for x in watches if x.destination == "HKT")
+        r = tracker.trip_insights(w, tracker.DEFAULT_SETTINGS, datetime(2026, 11, 27).date(), grid_fn=glitchy)
+        self.assertNotIn(413, [x["price"] for x in r["nearby"]])
+        self.assertEqual(sum(1 for x in r["nearby"] if x["price"] is None), 1)
 
     def test_flexible_watch_takes_cheapest_date(self):
         with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as fh:

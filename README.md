@@ -1,16 +1,26 @@
 # Flight price tracker (direct flights only)
 
-A small web app for two people sharing one password. Every ~30 minutes it
-checks the direct flights in `watches.toml` (exact flights, the cheapest
-direct option, or the cheapest day in a date window), shows them on a
-dashboard with charts, and sends Telegram alerts when a price drops, reaches
-your target, climbs fast, or a watched flight disappears. A summary arrives
-each morning at about 08:23 IST.
+A small web app for two people sharing one password. About every 30 minutes
+it checks the direct flights in `watches.toml` (exact flights, a choice such
+as "IndiGo 6E 1217 or Akasa QP 623", or any direct flight one way) and shows
+them on a fare-board dashboard.
+
+**Telegram** only messages you when a tracked price changes (a drop or rise
+of ₹500 or 3%, whichever is larger, since the last message), so you know when
+to book. Nothing else is sent unless you turn it on in `[settings] alerts`.
+
+**On the dashboard only**, twice a day, each trip is compared with:
+- the same trip (same weekday, same length) in the other weeks within 30 days
+  either side, e.g. "51% above a typical Fri–Tue trip";
+- leaving or returning one day earlier or later (a 3×3 grid), with savings
+  shown, e.g. "Return Mon: save ₹7,139".
+These use the cheapest direct round trip on any airline for each date pair
+(Google's date grid), which is the right yardstick for "what does this trip
+cost", not your exact flights.
 
 Prices come from Google Flights through the open-source
 [`flights`](https://github.com/punitarani/fli) library, so they are the same
-prices Google shows; the difference is how often they are checked and what
-you are told. Always confirm on the airline's site before booking.
+prices Google shows. Always confirm on the airline's site before booking.
 
 Everything runs on free plans with no card: **Vercel** (app and checks),
 **Upstash Redis** (stored prices) and **Upstash QStash** (the 10-minute

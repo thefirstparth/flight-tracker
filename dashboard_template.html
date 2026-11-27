@@ -110,6 +110,49 @@ a { color: var(--navy); text-decoration: none; }
 .show-all { border: 0; background: transparent; color: var(--navy); font: inherit; font-weight: 600; font-size: 14px;
   padding: 10px 0 4px; cursor: pointer; border-top: 1px solid var(--line); width: 100%; text-align: left; }
 
+/* how your dates compare */
+.compare { border-top: 1px solid var(--line); }
+.compare-head { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 14px 22px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 550; padding: 6px 12px;
+  border-radius: 999px; background: var(--inset); color: var(--ink-2); }
+.chip.good { background: var(--down-bg); color: var(--down); }
+.chip.bad { background: var(--up-bg); color: var(--up); }
+.chip.meh { background: var(--amber-bg); color: var(--amber); }
+.compare .toggle { margin-left: auto; font-size: 14px; }
+.compare-body { padding: 0 22px 18px; }
+.compare-body h4 { margin: 8px 0 10px; font-size: 14px; font-weight: 600; }
+.compare-body .why { font-size: 12px; color: var(--ink-3); margin: -6px 0 10px; }
+.weeks { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; align-items: end; height: 150px; }
+.wk { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; min-width: 0; }
+.wk .bar { width: 100%; max-width: 46px; border-radius: 6px 6px 3px 3px; background: #cfcac0; position: relative; }
+.wk.yours .bar { background: var(--navy); }
+.wk.cheap .bar { background: #9cc9ad; }
+.wk .val { font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wk.yours .val { color: var(--navy); font-weight: 700; }
+.wk .lbl { font-size: 11px; color: var(--ink-3); white-space: nowrap; text-align: center; line-height: 1.2; }
+.wk.yours .lbl { color: var(--ink); font-weight: 650; }
+.typical { font-size: 13px; color: var(--ink-2); margin-top: 10px; }
+.grid3 { display: grid; grid-template-columns: 92px repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 4px; }
+.grid3 .hd { font-size: 12px; color: var(--ink-3); font-weight: 600; text-align: center; padding: 4px 0; }
+.grid3 .rh { font-size: 12px; color: var(--ink-3); font-weight: 600; display: flex; align-items: center; }
+.cell { border-radius: 12px; background: var(--inset); padding: 10px 6px; text-align: center; font-size: 14px; font-weight: 600;
+  font-variant-numeric: tabular-nums; border: 2px solid transparent; }
+.cell small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3); }
+.cell.yours { border-color: var(--navy); background: var(--panel); }
+.cell.save { background: var(--down-bg); color: var(--down); }
+.cell.save small { color: var(--down); }
+.cell.na { color: var(--ink-3); font-weight: 400; }
+@media (max-width: 640px) {
+  .compare-head { padding: 12px 18px; }
+  .compare .toggle { margin-left: 0; }
+  .compare-body { padding: 0 18px 16px; }
+  .weeks { gap: 3px; height: 140px; }
+  .wk .val { font-size: 9.5px; }
+  .wk .lbl { font-size: 9.5px; }
+  .grid3 { grid-template-columns: 64px repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .cell { font-size: 13px; padding: 8px 2px; }
+}
+
 /* history + foot */
 .more { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 22px 16px; }
 .toggle { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--ink);
@@ -219,7 +262,7 @@ function h(tag, attrs, ...kids) {  // text always goes in as text nodes
     else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else el.setAttribute(k, v === true ? "" : v);
   }
-  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
   return el;
 }
 const NS = "http://www.w3.org/2000/svg";
@@ -287,7 +330,7 @@ function boardRow(dir, leg, fallbackDate, fallbackFlight, from, to) {
   if (!leg) {
     return h("div", {class: "board-row"}, h("div", {class: "dir"}, dir),
       h("div", {class: "date t"}, fWDM.format(dOnly(fallbackDate))),
-      h("div", {class: "times t"}, h("span", {class: "mdate"}, fDM.format(dOnly(fallbackDate))), "—"),
+      h("div", {class: "times t"}, h("span", {class: "mdate"}, fWDM.format(dOnly(fallbackDate))), "—"),
       h("div", {class: "flight"}, logo(fallbackFlight), h("div", {style: "min-width:0"},
         h("div", {class: "code"}, isAny(fallbackFlight) ? "Any direct" : fallbackFlight.replace("|", " or ")),
         h("div", {class: "name"}, `${from} → ${to}`))),
@@ -298,7 +341,7 @@ function boardRow(dir, leg, fallbackDate, fallbackFlight, from, to) {
   return h("div", {class: "board-row"},
     h("div", {class: "dir"}, dir),
     h("div", {class: "date t"}, fWDM.format(dOnly(leg.dep.slice(0, 10)))),
-    h("div", {class: "times t"}, h("span", {class: "mdate"}, fDM.format(dOnly(leg.dep.slice(0, 10)))),
+    h("div", {class: "times t"}, h("span", {class: "mdate"}, fWDM.format(dOnly(leg.dep.slice(0, 10)))),
       hm(leg.dep), h("span", {class: "arr"}, "→"), hm(leg.arr), next ? h("sup", null, "+1") : null),
     h("div", {class: "flight"}, logo(leg.flight), h("div", {style: "min-width:0"},
       h("div", {class: "code"}, leg.flight), h("div", {class: "name"}, `${AIR[c] || c} · ${leg.from} → ${leg.to}`))),
@@ -321,7 +364,8 @@ function optionsBlock(w) {
   const best = Math.min(...ch.map(c => c.price));
   const legCell = (leg, f, cls) => h("div", {class: "leg " + cls}, logo(f), h("div", {style: "min-width:0"},
     h("b", {class: "t"}, leg ? `${hm(leg.dep)} → ${hm(leg.arr)}` : f),
-    h("small", null, `${f} · ${AIR[code(f)] || code(f)}`, preferred(f) ? h("span", {class: "pref"}, " · preferred") : null)));
+    h("small", null, (leg ? fW.format(dOnly(leg.dep.slice(0, 10))) + " · " : "") + `${f} · ${AIR[code(f)] || code(f)}`,
+      preferred(f) ? h("span", {class: "pref"}, " · preferred") : null)));
   const SHOW = 3;
   const rows = ch.map((c, i) => h("div", {class: "opt" + (c.price === best ? " best" : ""), hidden: i >= SHOW},
       legCell((c.legs || [])[0], c.flights[0], "out"), legCell((c.legs || [])[1], c.flights[1], "back"),
@@ -343,6 +387,91 @@ function preferenceNote(w) {
   const prefBest = Math.min(...w.choices.filter(c => c.flights[i] === pref).map(c => c.price));
   if (!isFinite(prefBest)) return h("div", {class: "note"}, `Your preferred ${pref} wasn't found on the last check.`);
   return h("div", {class: "note"}, `Cheapest is with ${w.current.flights[i]}. Your preferred ${pref} is ${inr(prefBest - w.current.price)} more (${inr(prefBest)}).`);
+}
+
+// ---- how your dates compare (dashboard only) ------------------------------------------
+const median = a => { const b = [...a].sort((x, y) => x - y); const n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : null; };
+const significant = (save, base) => save >= Math.max(1000, base * 0.05);
+function compareBlock(w) {
+  const ins = w.insights;
+  if (!ins || !(ins.similar || []).length) return null;
+  const others = ins.similar.filter(x => x.depart !== w.depart).map(x => x.price);
+  const typical = median(others);
+  const yours = ins.yours;
+  const tripName = w.return ? `${fW.format(dOnly(w.depart))}–${fW.format(dOnly(w.return))}` : fW.format(dOnly(w.depart));
+  const chips = [];
+  if (yours != null && typical) {
+    const pct = Math.round((yours - typical) / typical * 100);
+    if (Math.abs(pct) < 5) chips.push(h("span", {class: "chip"}, `About what a ${tripName} trip usually costs`));
+    else if (pct > 0) chips.push(h("span", {class: pct >= 20 ? "chip bad" : "chip meh"}, `${pct}% above a typical ${tripName} trip`));
+    else chips.push(h("span", {class: "chip good"}, `${-pct}% below a typical ${tripName} trip`));
+  }
+  const near = (ins.nearby || []).filter(x => x.price != null && !(x.depart === w.depart && (x.return || null) === (w.return || null)));
+  const bestNear = near.reduce((a, b) => (!a || b.price < a.price) ? b : a, null);
+  const nearLabel = x => {
+    const parts = [];
+    if (x.depart !== w.depart) parts.push(`leave ${fW.format(dOnly(x.depart))}`);
+    if (w.return && x.return !== w.return) parts.push(`return ${fW.format(dOnly(x.return))}`);
+    return parts.join(", ");
+  };
+  if (yours != null && bestNear && significant(yours - bestNear.price, yours)) {
+    const label = nearLabel(bestNear);
+    chips.push(h("span", {class: "chip good"}, label.charAt(0).toUpperCase() + label.slice(1) + `: save ${inr(yours - bestNear.price)}`));
+  } else if (yours != null && near.length) chips.push(h("span", {class: "chip"}, "Your dates are about the cheapest nearby"));
+
+  const body = h("div", {class: "compare-body", hidden: true});
+  let built = false;
+  const toggle = h("button", {class: "toggle", type: "button", "aria-expanded": "false", onclick: () => {
+    const open = toggle.getAttribute("aria-expanded") !== "true";
+    toggle.setAttribute("aria-expanded", String(open)); body.hidden = !open;
+    if (open && !built) { built = true; body.append(...weeksChart(w, ins, typical, tripName), ...nearbyGrid(w, ins, yours)); }
+  }}, "Compare dates", icon(I_CHEV));
+  return h("div", {class: "compare"}, h("div", {class: "compare-head"}, chips, toggle), body);
+}
+function weeksChart(w, ins, typical, tripName) {
+  const list = ins.similar;
+  const hi = Math.max(...list.map(x => x.price)), lo = Math.min(...list.map(x => x.price));
+  const cols = list.map(x => {
+    const mine = x.depart === w.depart;
+    const pct = 18 + 82 * (x.price - lo * 0.85) / (hi - lo * 0.85);
+    return h("div", {class: "wk" + (mine ? " yours" : x.price === lo ? " cheap" : ""),
+        title: `${fWDM.format(dOnly(x.depart))}${x.return ? " → " + fWDM.format(dOnly(x.return)) : ""}: ${inr(x.price)}`},
+      h("div", {class: "val"}, inrK(x.price)),
+      h("div", {class: "bar", style: `height:${Math.max(6, Math.min(100, pct))}%`}),
+      h("div", {class: "lbl"}, fDM.format(dOnly(x.depart)), mine ? h("br") : null, mine ? "yours" : null));
+  });
+  return [h("h4", null, `Same ${tripName} trip, other weeks`),
+    h("div", {class: "why"}, "Cheapest direct round trip on any airline · ±30 days around your dates"),
+    h("div", {class: "weeks", role: "img", "aria-label": list.map(x => `${fDM.format(dOnly(x.depart))} ${inr(x.price)}`).join(", ")}, cols),
+    typical ? h("div", {class: "typical"}, `Typical (median of the other weeks): `, h("b", {class: "num"}, inr(typical)),
+      ` · cheapest ${fDM.format(dOnly(list.find(x => x.price === lo).depart))} at `, h("b", {class: "num"}, inr(lo))) : null];
+}
+function nearbyGrid(w, ins, yours) {
+  const near = ins.nearby || [];
+  if (!near.length) return [];
+  const deps = [...new Set(near.map(x => x.depart))].sort();
+  const rets = [...new Set(near.map(x => x.return).filter(Boolean))].sort();
+  const find = (d, r) => near.find(x => x.depart === d && (x.return || null) === (r || null));
+  const cell = (d, r) => {
+    const x = find(d, r), mine = d === w.depart && (r || null) === (w.return || null);
+    if (!x || x.price == null) return h("div", {class: "cell na"}, "—");
+    const save = yours != null ? yours - x.price : 0;
+    const cls = "cell" + (mine ? " yours" : yours != null && significant(save, yours) ? " save" : "");
+    return h("div", {class: cls}, inrK(x.price),
+      h("small", null, mine ? "your dates" : yours == null ? "" : save > 0 ? `save ${inrK(save)}` : save < 0 ? `+${inrK(-save)}` : "same"));
+  };
+  const out = [h("h4", {style: "margin-top:18px"}, "A day earlier or later"),
+    h("div", {class: "why"}, "Cheapest direct round trip on any airline for each date pair")];
+  if (!rets.length) {
+    out.push(h("div", {class: "grid3", style: "grid-template-columns: repeat(3, minmax(0,1fr))"},
+      deps.map(d => h("div", {class: "hd"}, fWDM.format(dOnly(d)))), deps.map(d => cell(d, null))));
+    return out;
+  }
+  out.push(h("div", {class: "grid3"},
+    h("div", {class: "hd", style: "text-align:left"}, "Leave / Back"),
+    rets.map(r => h("div", {class: "hd"}, fWDM.format(dOnly(r)))),
+    deps.map(d => [h("div", {class: "rh"}, fWDM.format(dOnly(d))), rets.map(r => cell(d, r))])));
+  return out;
 }
 
 // ---- price history ------------------------------------------------------------------
@@ -416,6 +545,7 @@ function fare(w) {
       h("div", {class: "side"}, change(w, pts), sparkline(pts)),
       preferenceNote(w)),
     board(w),
+    compareBlock(w),
     optionsBlock(w),
     h("div", {class: "more"},
       h("div", null, toggle, h("div", {class: "checked"}, w.checked_at ? "Checked " + ago(t(w.checked_at)) : "Not checked yet")),

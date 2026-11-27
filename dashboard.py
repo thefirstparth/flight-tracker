@@ -88,6 +88,7 @@ def collect(config: Path, store) -> dict:
             "choices": [{"price": o.price, "flights": list(o.flights), "legs": list(o.legs)} for o in fitting[:12]]
             if w.flights and any(f == tracker.ANY or "|" in f for f in w.flights) else [],
             "checked_at": (state.get("searches", {}).get(w.search_id) or {}).get("checked_at"),
+            "insights": (latest.get("insights") or {}).get(w.search_id),
         })
         end = w.ret or w.depart_until or w.depart
         t = trips.setdefault(w.trip, {"name": w.trip, "start": w.depart, "end": end, "watches": []})
@@ -225,6 +226,37 @@ def _walk(rng, n, base, shared):
     return out
 
 
+# Real cheapest-direct round-trip prices seen on 27 Nov 2026 for BLR-HKT 4-night trips.
+DEMO_HKT_FRIDAYS = {"2026-12-25": 64670, "2027-01-01": 35278, "2027-01-08": 29695, "2027-01-15": 61015,
+                    "2027-01-22": 43690, "2027-01-29": 28337, "2027-02-05": 27752, "2027-02-12": 26962,
+                    "2027-02-19": 25030}
+DEMO_HKT_NEARBY = {("2027-01-21", "2027-01-25"): 37717, ("2027-01-21", "2027-01-26"): 44188,
+                   ("2027-01-21", "2027-01-27"): 40684, ("2027-01-22", "2027-01-25"): 36551,
+                   ("2027-01-22", "2027-01-27"): 40183, ("2027-01-23", "2027-01-26"): 45297,
+                   ("2027-01-23", "2027-01-27"): 41790}
+
+
+def _demo_grid(origin, destination, start, end, days, settings):
+    """Date grid for previews: real numbers for Phuket, a smooth made-up curve elsewhere."""
+    rng = random.Random(f"{origin}{destination}{days}")
+    out, d = {}, start
+    while d <= end:
+        r = d + timedelta(days=days) if days else None
+        key = (d.isoformat(),) + ((r.isoformat(),) if r else ())
+        if destination == "HKT" and key == ("2027-01-23", "2027-01-25"):
+            pass  # Google returned a glitch (₹413) here; real data has no price for it
+        elif destination == "HKT" and key in DEMO_HKT_NEARBY:
+            out[key] = DEMO_HKT_NEARBY[key]
+        elif destination == "HKT" and days == 4 and d.isoformat() in DEMO_HKT_FRIDAYS:
+            out[key] = DEMO_HKT_FRIDAYS[d.isoformat()]
+        else:
+            base = {"SIN": 26500, "HKT": 33000}.get(destination, 25000) + (2500 if origin == "DEL" else 0)
+            weekend = 1.12 if d.weekday() in (4, 5) else 1.0
+            out[key] = round(base * weekend * rng.uniform(0.9, 1.18) / 10) * 10
+        d += timedelta(days=1)
+    return out
+
+
 def demo_data(config: Path) -> dict:
     settings, watches = tracker.load_config(config)
     rng = random.Random(11)
@@ -296,13 +328,21 @@ def demo_data(config: Path) -> dict:
                 key=lambda o: o["price"])}
     events.sort(key=lambda e: e["checked_at"])
 
+    insights = {}
+    for w in watches:
+        if w.flexible or w.search_id in insights:
+            continue
+        ins = tracker.trip_insights(w, settings, now.date(), grid_fn=_demo_grid)
+        if ins:
+            insights[w.search_id] = {"checked_at": now.isoformat(), "ok": True, **ins}
+
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         fs = FileStore(Path(tmp))
         fs.save_state({"watches": state, "failed_runs": 0, "updated_at": now.isoformat()})
         fs.add_history(history)
         fs.add_events(events)
-        fs.save_latest({"updated_at": now.isoformat(), "searches": searches})
+        fs.save_latest({"updated_at": now.isoformat(), "searches": searches, "insights": insights})
         data = collect(config, fs)
     data["demo"] = True
     return data
