@@ -106,6 +106,7 @@ def collect(config: Path, store) -> dict:
         "updated_at": state.get("updated_at"),
         "failed_runs": state.get("failed_runs", 0),
         "check_every_minutes": settings["check_every_minutes"],
+        "owner": settings["owner_name"],
         "rules": {k: settings[k] for k in ("drop_alert_rupees", "drop_alert_percent",
                                            "rise_alert_rupees", "rise_alert_percent", "direct_only")},
         "trips": sorted(trips.values(), key=lambda t: t["start"]),
@@ -348,6 +349,11 @@ def demo_data(config: Path) -> dict:
                 day = (now - timedelta(days=npts - 1 - i)).date().isoformat()
                 price = min(hi_hist, max(lo_hist, price + rng.gauss(-40, 900)))
                 hist.append([day, float(round(price))])
+            tracked = [state[o.id]["last"] for o in watches if o.search_id == w.search_id and (state.get(o.id) or {}).get("last")]
+            if tracked:  # live, Google's "now" is the same cheapest round trip we track
+                scale = min(tracked) / nowp
+                nowp = min(tracked)
+                hist = [[d, float(round(p * scale))] for d, p in hist]
             hist[-1][1] = float(nowp)
             google[w.search_id] = {"checked_at": now.isoformat(), "level": None, "now": float(nowp),
                                    "typical": float(typical), "low": float(low), "high": float(high),
@@ -361,12 +367,19 @@ def demo_data(config: Path) -> dict:
             continue
         ins = tracker.trip_insights(w, settings, now.date(), grid_fn=_demo_grid)
         if ins:
+            g = google.get(w.search_id)
+            if g:  # the grid's price for your own dates matches the tracked price, as it does live
+                ins["yours"] = g["now"]
+                for row in ins.get("similar", []) + ins.get("nearby", []):
+                    if row.get("depart") == w.depart and row.get("return") == w.ret:
+                        row["price"] = g["now"]
             insights[w.search_id] = {"checked_at": now.isoformat(), "ok": True, **ins}
 
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         fs = FileStore(Path(tmp))
-        fs.save_state({"watches": state, "failed_runs": 0, "updated_at": now.isoformat()})
+        fs.save_state({"watches": state, "failed_runs": 0, "updated_at": now.isoformat(),
+                       "searches": {sid: {"checked_at": checks[-1].isoformat(), "ok": True} for sid in paths}})
         fs.add_history(history)
         fs.add_events(events)
         fs.save_latest({"updated_at": now.isoformat(), "searches": searches, "insights": insights, "google": google})

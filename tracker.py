@@ -102,6 +102,7 @@ DEFAULT_SETTINGS = {
     # Dashboard-only comparisons: similar trips within +/- 30 days and +/- 1 day.
     "insights": True,
     "insights_every_hours": 12,
+    "owner_name": "",  # shown in the dashboard greeting, e.g. "Parth"
 }
 
 

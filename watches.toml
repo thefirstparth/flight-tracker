@@ -25,6 +25,7 @@
 # A watch stops being checked once its departure date has passed.
 
 [settings]
+owner_name = "Parth"
 currency = "INR"
 adults = 1
 direct_only = true

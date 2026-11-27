@@ -2,40 +2,47 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#e7e5e0">
 <title>Flight Prices</title>
 <style>
-/* One theme, between light and dark: warm stone, airport-signage navy, and
-   colour only where it means something (green cheaper, red dearer, amber above the low). */
+/* Fare board: one theme (warm stone), airport-signage navy, colour only for meaning.
+   See DESIGN.md. Two levels: the trip list, then one trip's page. */
 :root {
   color-scheme: light;
   --bg: #e7e5e0; --panel: #f6f5f2; --inset: #eeece7; --line: #dcd8d0;
   --ink: #161513; --ink-2: #57544e; --ink-3: #807c75;
   --navy: #1f3a5f; --navy-wash: #dfe5ec;
   --down: #12744a; --down-bg: #d9ede1; --up: #b3321f; --up-bg: #f5ded8; --amber: #835800; --amber-bg: #f1e6c9;
-  --radius: 20px;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --radius: 20px;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--ink);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
 a { color: var(--navy); text-decoration: none; }
-.num, .t { font-variant-numeric: tabular-nums; }
-.caps { font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
-.wrap { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+button { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); }
+.caps { font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+.wrap { max-width: 720px; margin: 0 auto; padding: max(24px, env(safe-area-inset-top)) 16px 64px; }
+:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; border-radius: 12px; }
+@media (prefers-reduced-motion: no-preference) {
+  .view { animation: enter 0.24s ease both; }
+  @keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+}
 
 /* top bar */
-.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-.top h1 { margin: 4px 0 0; font-size: 30px; font-weight: 650; letter-spacing: -0.02em; }
-.status { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--ink-2); font-size: 14px; }
+.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.top h1 { margin: 4px 0 0; font-size: 32px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; }
+.status { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--ink-2); font-size: 15px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--down); flex: none; }
 .dot.warn { background: var(--up); }
 .actions { display: flex; gap: 8px; }
-.icon-btn { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel);
+.icon-btn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel);
   color: var(--ink-2); display: grid; place-items: center; cursor: pointer; }
 .icon-btn:hover { color: var(--ink); }
 .icon-btn svg { width: 20px; height: 20px; }
@@ -44,218 +51,144 @@ a { color: var(--navy); text-decoration: none; }
 .menu { position: relative; }
 .menu summary { list-style: none; }
 .menu summary::-webkit-details-marker { display: none; }
-.menu-pop { position: absolute; right: 0; top: 48px; z-index: 5; min-width: 150px; padding: 8px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px rgba(22,21,19,0.12); }
-.menu-pop a { display: block; padding: 8px 12px; border-radius: 9px; color: var(--ink); }
+.menu-pop { position: absolute; right: 0; top: 52px; z-index: 5; min-width: 160px; padding: 8px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 32px rgba(22,21,19,0.14); }
+.menu-pop a { display: block; padding: 12px; border-radius: 10px; color: var(--ink); }
 .menu-pop a:hover { background: var(--inset); }
-.notice { margin-top: 16px; padding: 12px 16px; border-radius: 14px; background: var(--navy-wash); color: var(--navy); font-size: 14px; }
+.notice { margin-top: 16px; padding: 12px 16px; border-radius: 16px; background: var(--navy-wash); color: var(--navy); font-size: 15px; }
 
-/* trip board */
-.trip { margin-top: 32px; animation: rise 0.35s ease both; }
-@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.trip-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 0 8px 12px; }
-.trip-head h2 { margin: 4px 0 0; font-size: 26px; font-weight: 650; letter-spacing: -0.02em; }
-.trip-head .when { color: var(--ink-2); font-size: 14px; margin-top: 4px; }
-.countdown { text-align: right; flex: none; }
-.countdown b { display: block; font-size: 26px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; }
+/* ---------- level 1: the trip list ---------- */
+.list { margin-top: 32px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; gap: 4px 16px; align-items: center; width: 100%;
+  padding: 20px 24px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; cursor: pointer; }
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--inset); }
+.row .route { font-family: var(--mono); font-size: 13px; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 600; }
+.row .city { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.row .when { font-size: 15px; color: var(--ink-2); margin-top: 2px; }
+.row .right { text-align: right; }
+.row .price { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.row .chev { color: var(--ink-3); }
+.tag { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--navy-wash); color: var(--navy); letter-spacing: 0; }
+.word { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 650; margin-top: 4px; white-space: nowrap; }
+.word::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.w-book { color: var(--down); } .w-fair { color: var(--amber); } .w-wait { color: var(--up); } .w-none { color: var(--ink-3); }
 
-.fare { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
-.fare-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; padding: 24px 24px 16px; }
-.who { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.tag { font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 999px; background: var(--navy-wash); color: var(--navy); }
-.big { font-size: 40px; font-weight: 650; letter-spacing: -0.03em; line-height: 1.05; margin-top: 8px; }
-.verdict { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; font-weight: 550;
-  padding: 4px 12px 4px 8px; border-radius: 999px; }
-.verdict::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
-.v-down { background: var(--down-bg); color: var(--down); }
-.v-up { background: var(--up-bg); color: var(--up); }
-.v-amber { background: var(--amber-bg); color: var(--amber); }
-.v-neutral { background: var(--inset); color: var(--ink-2); }
-.side { text-align: right; display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 8px; }
-.change { font-size: 14px; font-weight: 550; white-space: nowrap; }
-.change.down { color: var(--down); } .change.up { color: var(--up); } .change.flat { color: var(--ink-3); font-weight: 500; }
-.spark { width: 132px; height: 40px; display: block; }
-.note { grid-column: 1 / -1; font-size: 13px; color: var(--ink-2); }
+/* ---------- level 2: one trip ---------- */
+.back { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 16px -8px; padding: 8px; border: 0; background: transparent;
+  color: var(--navy); font-weight: 600; cursor: pointer; border-radius: 12px; }
+.back svg { width: 20px; height: 20px; }
+.trip-head .route { font-family: var(--mono); font-size: 14px; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 600;
+  display: flex; align-items: center; gap: 8px; }
+.trip-head h1 { margin: 4px 0 0; font-size: 36px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; }
+.trip-head .when { color: var(--ink-2); margin-top: 4px; }
 
-/* departure-board rows */
-.board { background: var(--inset); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 4px 24px; }
-.board-row { display: grid; grid-template-columns: 52px 104px 168px minmax(0, 1fr) 70px; gap: 12px; align-items: center;
-  padding: 12px 0; border-bottom: 1px dashed var(--line); }
-.board-row:last-child { border-bottom: 0; }
-.board-row .dir { font-size: 11px; letter-spacing: 0.09em; font-weight: 700; color: var(--ink-3); }
-.board-row .date { font-size: 14px; color: var(--ink-2); }
-.board-row .times { font-family: var(--mono); font-size: 18px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; }
-.board-row .times .arr { color: var(--ink-3); font-weight: 400; margin: 0 8px; }
-.board-row .times sup { font-size: 11px; color: var(--ink-3); font-weight: 500; }
-.flight { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.flight .code { font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: 0.02em; white-space: nowrap; }
-.flight .name { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.logo { width: 26px; height: 26px; border-radius: 7px; flex: none; display: grid; place-items: center;
-  color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }
-.board-row .dur { text-align: right; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
-.board-row .dur b { display: block; color: var(--ink); font-weight: 550; font-size: 14px; }
-.mdate { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: none; color: var(--ink-3); font-weight: 500; font-size: 13px; margin-right: 8px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-top: 16px; overflow: hidden; }
+.pad { padding: 24px; }
+.price-block .big { font-size: 48px; font-weight: 700; letter-spacing: -0.035em; line-height: 1; }
+.price-block .sub { color: var(--ink-3); font-size: 14px; margin-top: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 15px; font-weight: 650;
+  padding: 6px 14px 6px 12px; border-radius: 999px; }
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.p-book { background: var(--down-bg); color: var(--down); }
+.p-fair { background: var(--amber-bg); color: var(--amber); }
+.p-wait { background: var(--up-bg); color: var(--up); }
+.reason { margin: 12px 0 0; color: var(--ink-2); font-size: 15px; }
 
-/* options (all acceptable combinations) */
-.options { padding: 16px 24px 8px; }
-.options .caps { margin-bottom: 8px; }
-.opt { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px 12px; align-items: center;
-  padding: 12px 0; border-top: 1px solid var(--line); }
-.opt .leg { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.opt .leg b { font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: -0.01em; white-space: nowrap; }
-.opt .leg small { display: block; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.opt .price { text-align: right; font-weight: 650; font-size: 16px; white-space: nowrap; }
-.opt .price small { display: block; font-weight: 600; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
-.opt.best .price, .opt.best .price small { color: var(--down); }
-.pref { color: var(--navy); font-weight: 600; }
-.show-all { border: 0; background: transparent; color: var(--navy); font: inherit; font-weight: 600; font-size: 14px;
-  padding: 8px 0 4px; cursor: pointer; border-top: 1px solid var(--line); width: 100%; text-align: left; }
+.seg { display: flex; background: var(--inset); border-radius: 12px; padding: 4px; margin: 0 0 20px; }
+.seg button { flex: 1; border: 0; background: transparent; padding: 10px 12px; border-radius: 9px; cursor: pointer;
+  color: var(--ink-2); font-weight: 600; font-size: 15px; }
+.seg button[aria-selected="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(22,21,19,0.16); }
+.seg-note { font-size: 14px; color: var(--ink-2); margin: -8px 0 16px; }
 
-/* book or wait */
-.advice { margin: 0 24px 16px; padding: 16px; border-radius: 16px; background: var(--inset); }
-.advice-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.advice h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
-.advice.book h3 { color: var(--down); } .advice.fair h3 { color: var(--amber); } .advice.wait h3 { color: var(--up); }
-.advice .sum { margin: 4px 0 12px; font-size: 14px; color: var(--ink-2); }
-.scale { position: relative; height: 8px; border-radius: 999px; display: grid; grid-template-columns: 40fr 20fr 40fr; gap: 4px; }
-.scale span { border-radius: 999px; }
-.scale span:nth-child(1) { background: var(--down); } .scale span:nth-child(2) { background: #d6a531; } .scale span:nth-child(3) { background: var(--up); }
-.scale .knob { position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
-  background: var(--panel); border: 4px solid var(--ink); box-shadow: 0 1px 4px rgba(22,21,19,0.25); }
-.scale-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); margin-top: 8px; }
-.scale-labels .on { color: var(--ink); font-weight: 650; }
-.why { margin-top: 8px; }
-.why .toggle { font-size: 14px; }
-.reasons { list-style: none; margin: 8px 0 0; padding: 0; }
-.reasons li { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 8px; align-items: start; padding: 8px 0;
-  border-top: 1px solid var(--line); font-size: 14px; }
-.lean { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-align: center; border-radius: 999px; padding: 2px 0; margin-top: 2px; }
-.lean-book { color: var(--down); background: var(--down-bg); }
-.lean-wait { color: var(--up); background: var(--up-bg); }
-.lean-neutral { color: var(--ink-3); background: var(--panel); }
-.gchart { margin-top: 12px; }
-.gchart .caps { margin-bottom: 4px; }
-.gchart .band { fill: var(--down-bg); }
-.gchart .band-label { fill: var(--down); font-size: 11px; font-weight: 600; }
-.method { font-size: 12px; color: var(--ink-3); margin-top: 8px; }
-@media (max-width: 640px) { .advice { margin: 0 16px 16px; } }
+.board { border-top: 1px solid var(--line); background: var(--inset); padding: 4px 24px; }
+.leg { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 16px 0;
+  border-top: 1px dashed var(--line); }
+.leg:first-child { border-top: 0; }
+.leg .dir { font-size: 12px; letter-spacing: 0.09em; font-weight: 700; color: var(--ink-3); }
+.leg .times { font-family: var(--mono); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; }
+.leg .times .to { color: var(--ink-3); font-weight: 400; margin: 0 6px; }
+.leg .times sup { font-size: 11px; color: var(--ink-3); }
+.leg .date { font-size: 14px; color: var(--ink-2); }
+.leg .meta { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); min-width: 0; }
+.leg .meta .code { font-family: var(--mono); font-weight: 600; color: var(--ink); white-space: nowrap; }
+.leg .meta .rest { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.leg .dur { text-align: right; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
+.logo { width: 24px; height: 24px; border-radius: 6px; flex: none; display: grid; place-items: center; color: #fff; font-size: 10px; font-weight: 700; }
 
-/* how your dates compare */
-.compare { border-top: 1px solid var(--line); }
-.compare-head { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 16px 24px; }
-.chip { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 550; padding: 8px 12px;
-  border-radius: 999px; background: var(--inset); color: var(--ink-2); }
-.chip.good { background: var(--down-bg); color: var(--down); }
-.chip.bad { background: var(--up-bg); color: var(--up); }
-.chip.meh { background: var(--amber-bg); color: var(--amber); }
-.compare .toggle { margin-left: auto; font-size: 14px; }
-.compare-body { padding: 0 24px 16px; }
-.compare-body h4 { margin: 8px 0 8px; font-size: 14px; font-weight: 600; }
-.compare-body .why { font-size: 12px; color: var(--ink-3); margin: -8px 0 8px; }
-.weeks { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; align-items: end; height: 150px; }
+.section h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.section .lead { margin: 4px 0 0; color: var(--ink-2); font-size: 15px; }
+.section .lead b { color: var(--ink); }
+.foot { font-size: 13px; color: var(--ink-3); margin-top: 12px; }
+
+.chart { position: relative; margin-top: 16px; }
+.chart svg { display: block; width: 100%; height: 200px; touch-action: pan-y; }
+.chart .grid { stroke: var(--line); }
+.chart .tick { fill: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart .band { fill: var(--down-bg); }
+.chart .band-label { fill: var(--down); font-size: 12px; font-weight: 600; }
+.chart .cross { stroke: var(--ink-3); stroke-dasharray: 3 3; }
+.chart .tick.now { fill: var(--navy); font-weight: 700; font-size: 13px; }
+.tip { position: absolute; top: -8px; pointer-events: none; background: var(--ink); color: var(--panel); border-radius: 10px;
+  padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+
+.weeks { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; align-items: end; height: 160px; margin-top: 16px; }
 .wk { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; min-width: 0; }
-.wk .bar { width: 100%; max-width: 46px; border-radius: 6px 6px 3px 3px; background: #cfcac0; position: relative; }
+.wk .bar { width: 100%; max-width: 44px; border-radius: 6px 6px 3px 3px; background: #cfcac0; }
 .wk.yours .bar { background: var(--navy); }
 .wk.cheap .bar { background: #9cc9ad; }
 .wk .val { font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wk.yours .val { color: var(--navy); font-weight: 700; }
-.wk .lbl { font-size: 11px; color: var(--ink-3); white-space: nowrap; text-align: center; line-height: 1.2; }
-.wk.yours .lbl { color: var(--ink); font-weight: 650; }
-.typical { font-size: 13px; color: var(--ink-2); margin-top: 8px; }
-.grid3 { display: grid; grid-template-columns: 92px repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 4px; }
+.wk .lbl { font-size: 11px; color: var(--ink-3); white-space: nowrap; text-align: center; line-height: 1.25; }
+.wk.yours .lbl { color: var(--ink); font-weight: 700; }
+
+.disclose { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 16px; padding: 14px 0 0;
+  border: 0; border-top: 1px solid var(--line); background: transparent; cursor: pointer; font-weight: 600; text-align: left; }
+.disclose svg { width: 20px; height: 20px; color: var(--ink-3); transition: transform 0.2s; }
+.disclose[aria-expanded="true"] svg { transform: rotate(180deg); }
+.grid3 { display: grid; grid-template-columns: 84px repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
 .grid3 .hd { font-size: 12px; color: var(--ink-3); font-weight: 600; text-align: center; padding: 4px 0; }
 .grid3 .rh { font-size: 12px; color: var(--ink-3); font-weight: 600; display: flex; align-items: center; }
-.cell { border-radius: 12px; background: var(--inset); padding: 8px 8px; text-align: center; font-size: 14px; font-weight: 600;
+.cell { border-radius: 12px; background: var(--inset); padding: 10px 4px; text-align: center; font-size: 15px; font-weight: 650;
   font-variant-numeric: tabular-nums; border: 2px solid transparent; }
 .cell small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3); }
 .cell.yours { border-color: var(--navy); background: var(--panel); }
 .cell.save { background: var(--down-bg); color: var(--down); }
 .cell.save small { color: var(--down); }
 .cell.na { color: var(--ink-3); font-weight: 400; }
-@media (max-width: 640px) {
-  .compare-head { padding: 12px 16px; }
-  .compare .toggle { margin-left: 0; }
-  .compare-body { padding: 0 16px 16px; }
-  .weeks { gap: 4px; height: 140px; }
-  .wk .val { font-size: 9.5px; }
-  .wk .lbl { font-size: 9.5px; }
-  .grid3 { grid-template-columns: 64px repeat(3, minmax(0, 1fr)); gap: 4px; }
-  .cell { font-size: 13px; padding: 8px 4px; }
-}
 
-/* history + foot */
-.more { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px 16px; }
-.toggle { display: inline-flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--ink);
-  font: inherit; font-weight: 550; cursor: pointer; padding: 4px 0; }
-.toggle svg { width: 20px; height: 20px; transition: transform 0.2s; color: var(--ink-3); }
-.toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
-.book { font-weight: 600; display: inline-flex; align-items: center; gap: 4px; padding: 8px 16px; border-radius: 999px;
-  background: var(--navy); color: #fff; font-size: 14px; white-space: nowrap; }
+.book { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 24px; padding: 16px; border-radius: 16px;
+  background: var(--navy); color: #fff; font-weight: 700; font-size: 17px; }
 .book:hover { background: #18304f; }
-.history { padding: 0 24px 16px; }
-.chart { position: relative; }
-.chart svg { display: block; width: 100%; height: 190px; touch-action: pan-y; }
-.chart .grid { stroke: var(--line); stroke-width: 1; }
-.chart .tick { fill: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
-.chart .cross { stroke: var(--ink-3); stroke-dasharray: 3 3; }
-.tip { position: absolute; top: -4px; pointer-events: none; background: var(--ink); color: var(--panel); border-radius: 9px;
-  padding: 4px 8px; font-size: 13px; white-space: nowrap; }
-.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
-.fact { background: var(--inset); border-radius: 14px; padding: 8px 12px; }
-.fact b { display: block; font-size: 17px; font-weight: 650; margin-top: 4px; }
-.fact span { font-size: 12px; color: var(--ink-3); }
-.checked { font-size: 12px; color: var(--ink-3); }
 
-footer { margin-top: 40px; text-align: center; color: var(--ink-3); font-size: 12px; }
-.empty { text-align: center; padding: 64px 16px; color: var(--ink-2); }
+footer { margin-top: 40px; text-align: center; color: var(--ink-3); font-size: 13px; }
+.empty { text-align: center; padding: 48px 16px; color: var(--ink-2); }
 html:not(.js) .actions { display: none; }
 table.data { border-collapse: collapse; width: 100%; font-size: 14px; }
-table.data td, table.data th { padding: 8px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+table.data td, table.data th { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; }
 
-@media (max-width: 640px) {
-  .wrap { padding-top: 24px; }
-  .top h1 { font-size: 26px; }
-  .fare-head { padding: 16px 16px 16px; }
-  .big { font-size: 34px; }
-  .spark { width: 96px; height: 34px; }
+@media (max-width: 560px) {
+  .top h1 { font-size: 28px; }
+  .row { padding: 16px; gap: 2px 12px; }
+  .row .city { font-size: 20px; }
+  .row .price { font-size: 20px; }
+  .pad { padding: 20px 16px; }
   .board { padding: 4px 16px; }
-  .board-row { grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "dir times dur" "dir flight flight"; gap: 4px 8px; }
-  .board-row .dir { grid-area: dir; align-self: start; padding-top: 4px; }
-  .board-row .date { display: none; }
-  .board-row .times { grid-area: times; font-size: 16px; }
-  .board-row .flight { grid-area: flight; }
-  .board-row .dur { grid-area: dur; }
-  .board-row .dur b { display: inline; }
-  .board-row .dur span { display: none; }
-  .mdate { display: inline; }
-  .options { padding: 16px 16px 4px; }
-  .opt { grid-template-columns: minmax(0, 1fr) auto; }
-  .opt .leg.out { grid-column: 1; grid-row: 1; }
-  .opt .leg.back { grid-column: 1; grid-row: 2; }
-  .opt .price { grid-column: 2; grid-row: 1 / span 2; }
-  .more { padding: 12px 16px 16px; }
-  .history { padding: 0 16px 16px; }
-  .facts { gap: 8px; }
-  .fact b { font-size: 15px; }
-  .countdown b { font-size: 22px; }
-  .trip-head h2 { font-size: 23px; }
+  .trip-head h1 { font-size: 32px; }
+  .price-block .big { font-size: 42px; }
+  .leg .times { font-size: 18px; }
+  .weeks { gap: 3px; height: 150px; }
+  .wk .val, .wk .lbl { font-size: 9.5px; }
+  .grid3 { grid-template-columns: 64px repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .cell { font-size: 14px; padding: 8px 2px; }
 }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header class="top">
-    <div>
-      <div class="caps">Fare board · direct flights</div>
-      <h1>Your flights</h1>
-      <div class="status"><span class="dot" id="dot"></span><span id="sub"></span></div>
-    </div>
-    <div class="actions" id="actions"></div>
-  </header>
-  <div id="notice"></div>
+  <div id="app"></div>
   <!--__NOSCRIPT__-->
-  <main id="trips"></main>
-  <footer>Prices from Google Flights for 1 adult in economy · always confirm on the airline's site before booking</footer>
+  <footer>Prices from Google Flights · 1 adult · economy · direct flights · confirm on the airline's site before booking</footer>
 </div>
 <script id="data" type="application/json">/*__DASHBOARD_DATA__*/null</script>
 <script>
@@ -272,7 +205,6 @@ const fmt = o => new Intl.DateTimeFormat("en-GB", Object.assign({timeZone: "UTC"
 const fDM = fmt({day: "numeric", month: "short"}), fWDM = fmt({weekday: "short", day: "numeric", month: "short"});
 const fW = fmt({weekday: "short"});
 const fIST = new Intl.DateTimeFormat("en-GB", {timeZone: TZ, day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true});
-const fISTd = new Intl.DateTimeFormat("en-GB", {timeZone: TZ, day: "numeric", month: "short"});
 const AIR = Object.assign({}, D.airlines || {}, {"6E": "IndiGo", QP: "Akasa Air", IX: "Air India Express", AI: "Air India",
   SQ: "Singapore Airlines", TR: "Scoot"});
 const LOGO = {"6E": "#1b2a8a", QP: "#e8541a", IX: "#c8441a", AI: "#a8121b", SQ: "#1c2d5a", TR: "#b38900",
@@ -281,9 +213,9 @@ const CITY = {SIN: "Singapore", HKT: "Phuket", BLR: "Bengaluru", DEL: "Delhi", B
   HYD: "Hyderabad", CCU: "Kolkata", DXB: "Dubai", BKK: "Bangkok", KUL: "Kuala Lumpur", DPS: "Bali"};
 const city = c => CITY[c] || c;
 const code = f => f.split(" ")[0];
-const isAny = f => !f || f === "any";
+const WORD = {book: ["w-book", "Book now"], fair: ["w-fair", "Fair"], wait: ["w-wait", "Wait"]};
 
-function h(tag, attrs, ...kids) {  // text always goes in as text nodes
+function h(tag, attrs, ...kids) {  // text always goes in as text nodes, never HTML
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
@@ -300,311 +232,167 @@ const s = (tag, attrs, text) => { const el = document.createElementNS(NS, tag); 
 const icon = d => { const v = s("svg", {viewBox: "0 0 24 24", "aria-hidden": "true"}); v.append(s("path", {d, fill: "currentColor"})); return v; };
 const I_REFRESH = "M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z";
 const I_MORE = "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z";
-const I_CHEV = "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z";
+const I_CHEV_D = "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z";
+const I_CHEV_R = "M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6z";
+const I_CHEV_L = "M15.41 16.59 10.83 12l4.58-4.59L14 6l-6 6 6 6z";
 
 const ago = ms => { const m = Math.round((Date.now() - ms) / MIN); if (m < 1) return "just now"; if (m < 60) return m + " min ago";
   const hr = Math.round(m / 60); return hr < 36 ? hr + " hr ago" : Math.round(hr / 24) + " days ago"; };
-const daysUntil = d => Math.round((dOnly(d) - dOnly(new Intl.DateTimeFormat("en-CA", {timeZone: TZ}).format(new Date()))) / DAY);
+const todayIST = () => new Intl.DateTimeFormat("en-CA", {timeZone: TZ}).format(new Date());
+const daysUntil = d => Math.round((dOnly(d) - dOnly(todayIST())) / DAY);
 const hm = iso => iso.slice(11, 16);
 const dur = m => Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m";
+const median = a => { const b = [...a].sort((x, y) => x - y), n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : null; };
+const significant = (save, base) => save >= Math.max(1000, base * 0.05);
+function logo(f) { const c = code(f); return h("span", {class: "logo", style: `background:${LOGO[c] || "#807c75"}`, "aria-hidden": "true"}, c); }
+function dateRange(a, b) { return b ? `${fW.format(dOnly(a))} ${fDM.format(dOnly(a))} – ${fW.format(dOnly(b))} ${fDM.format(dOnly(b))}` : fWDM.format(dOnly(a)); }
+function routeText(w) { return `${w.from} ${w.return ? "⇄" : "→"} ${w.to}`; }
+function daysText(n) { return n > 1 ? `in ${n} days` : n === 1 ? "tomorrow" : n === 0 ? "today" : "departed"; }
 
-function logo(f) {
-  const c = isAny(f) ? "✈" : code(f);
-  return h("span", {class: "logo", style: `background:${LOGO[c] || "#807c75"}`, "aria-hidden": "true"}, c);
-}
-const points = w => (w.points || []).map(([ts, p]) => [t(ts), p]).filter(p => p[1] != null);
-function valueAt(pts, x) { let v; for (const [ts, p] of pts) { if (ts <= x) v = p; else break; } return v; }
-
-// ---- the headline: price, verdict, change, trend --------------------------------
-function verdict(w, pts) {
-  const st = w.state || {};
-  if (st.last == null) return ["v-neutral", "Waiting for the first price check"];
-  if (st.misses) return ["v-up", "Not found on the last check"];
-  if (new Set(pts.map(p => p[1])).size < 2) return ["v-neutral", "Tracking started · no movement yet"];
-  if (st.last <= st.low) return ["v-down", "Lowest since tracking began"];
-  const day = valueAt(pts, Date.now() - DAY);
-  if (day != null && st.last - day >= Math.max(500, st.last * 0.03)) return ["v-up", `Rising · up ${inr(st.last - day)} in a day`];
-  return ["v-amber", `${inr(st.last - st.low)} above the lowest`];
-}
-function change(w, pts) {
-  const st = w.state || {};
-  if (st.last == null || pts.length < 2) return null;
-  const ref = valueAt(pts, Date.now() - DAY) ?? pts[0][1];
-  const d = st.last - ref;
-  if (Math.abs(d) < 1) return h("div", {class: "change flat"}, "No change today");
-  return h("div", {class: "change " + (d < 0 ? "down" : "up")}, (d < 0 ? "↓ " : "↑ ") + inr(Math.abs(d)) + " today");
-}
-function sparkline(pts) {
-  const now = Math.max(t(D.updated_at) || 0, pts.length ? pts[pts.length - 1][0] : 0);
-  const from = now - 30 * DAY;
-  let p = pts.filter(([ts]) => ts >= from);
-  const before = valueAt(pts, from);
-  if (before != null) p = [[from, before], ...p];
-  if (p.length < 2) return null;
-  const W = 132, H = 40, x0 = p[0][0], x1 = Math.max(now, x0 + 1);
-  let lo = Math.min(...p.map(q => q[1])), hi = Math.max(...p.map(q => q[1]));
-  if (hi - lo < 1) { lo -= 1; hi += 1; }
-  const X = x => 2 + (x - x0) / (x1 - x0) * (W - 8), Y = v => 4 + (1 - (v - lo) / (hi - lo)) * (H - 8);
-  let d = ""; p.forEach(([ts, v], i) => { d += i ? `H${X(ts)}V${Y(v)}` : `M${X(ts)},${Y(v)}`; }); d += `H${X(x1)}`;
-  const last = p[p.length - 1][1], first = p[0][1];
-  const col = last < first ? "var(--down)" : last > first ? "var(--up)" : "var(--ink-3)";
-  const svg = s("svg", {class: "spark", viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img",
-    "aria-label": `30-day trend from ${inr(first)} to ${inr(last)}`});
-  svg.append(s("path", {d, fill: "none", stroke: col, "stroke-width": 2, "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke"}),
-    s("circle", {cx: X(x1), cy: Y(last), r: 3, fill: col}));
-  return svg;
+// The flights to show for a trip: "cheapest" is what is tracked and alerted on;
+// "pick" is the cheapest option with your preferred flight, when you have one.
+function preferredIndex(w) { return (w.flights || []).findIndex(p => p.includes("|")); }
+function yourPick(w) {
+  const i = preferredIndex(w);
+  if (i < 0 || !(w.choices || []).length) return null;
+  const pref = w.flights[i].split("|")[0];
+  return w.choices.filter(c => c.flights[i] === pref).sort((a, b) => a.price - b.price)[0] || null;
 }
 
-// ---- departure-board rows -----------------------------------------------------------
-function boardRow(dir, leg, fallbackDate, fallbackFlight, from, to) {
-  if (!leg) {
-    return h("div", {class: "board-row"}, h("div", {class: "dir"}, dir),
-      h("div", {class: "date t"}, fWDM.format(dOnly(fallbackDate))),
-      h("div", {class: "times t"}, h("span", {class: "mdate"}, fWDM.format(dOnly(fallbackDate))), "—"),
-      h("div", {class: "flight"}, logo(fallbackFlight), h("div", {style: "min-width:0"},
-        h("div", {class: "code"}, isAny(fallbackFlight) ? "Any direct" : fallbackFlight.replace("|", " or ")),
-        h("div", {class: "name"}, `${from} → ${to}`))),
-      h("div", {class: "dur"}, h("b", null, "Direct")));
-  }
-  const next = leg.arr.slice(0, 10) > leg.dep.slice(0, 10);
+// ---------------- level 1: the trip list ----------------
+function greeting() {
+  const hr = Number(new Intl.DateTimeFormat("en-GB", {timeZone: TZ, hour: "numeric", hour12: false}).format(new Date()));
+  const part = hr < 5 ? "evening" : hr < 12 ? "morning" : hr < 17 ? "afternoon" : "evening";
+  return `Good ${part}${D.owner ? ", " + D.owner : ""}`;
+}
+function statusLine() {
+  const last = t(D.updated_at);
+  if (D.failed_runs > 0) return [true, `Google isn't answering right now · showing prices from ${last ? ago(last) : "earlier"}`];
+  if (!last) return [false, "Waiting for the first price check"];
+  const stale = Date.now() - last > 3 * (D.check_every_minutes || 30) * MIN;
+  return [stale, stale ? `Prices from ${ago(last)} · checks seem to have stopped` : `Prices checked ${ago(last)}`];
+}
+function actions() {
+  if (!D.web) return null;
+  const btn = h("button", {class: "icon-btn", type: "submit", "aria-label": "Check prices now", title: "Check prices now"}, icon(I_REFRESH));
+  return h("div", {class: "actions"},
+    h("form", {method: "post", action: D.web.check_now, style: "margin:0", onsubmit: () => {
+      btn.classList.add("spin"); btn.disabled = true;
+      const st = document.getElementById("status-text"); if (st) st.textContent = "Checking prices… up to a minute"; }}, btn),
+    h("details", {class: "menu"}, h("summary", {class: "icon-btn", "aria-label": "More", title: "More"}, icon(I_MORE)),
+      h("div", {class: "menu-pop"}, h("a", {href: D.web.setup}, "Setup"), h("a", {href: D.web.logout}, "Log out"))));
+}
+function header(title, small) {
+  const [warn, text] = statusLine();
+  return [h("header", {class: "top"},
+      h("div", null, h("div", {class: "caps"}, small), h("h1", null, title),
+        h("div", {class: "status"}, h("span", {class: "dot" + (warn ? " warn" : "")}), h("span", {id: "status-text"}, text))),
+      actions()),
+    (D.web && D.web.notice) || D.demo ? h("div", {class: "notice"}, (D.web && D.web.notice) || "Preview with made-up price history.") : null];
+}
+function listView() {
+  const ws = [...(D.watches || [])].sort((a, b) => a.depart < b.depart ? -1 : a.depart > b.depart ? 1 : 0);
+  const rows = ws.map(w => {
+    const st = w.state || {}, a = w.advice;
+    const [cls, word] = st.misses ? ["w-wait", "Not found"] : a ? WORD[a.verdict] : ["w-none", st.last == null ? "Checking…" : ""];
+    return h("button", {class: "row", type: "button", onclick: () => go(w.id),
+        "aria-label": `${city(w.to)}${w.who ? " for " + w.who : ""}, ${dateRange(w.depart, w.return)}, ${st.last != null ? inr(st.last) : "no price yet"}${word ? ", " + word : ""}`},
+      h("div", null,
+        h("div", {class: "route"}, routeText(w)),
+        h("div", {class: "city"}, city(w.to), w.who ? h("span", {class: "tag"}, w.who) : null),
+        h("div", {class: "when"}, `${dateRange(w.depart, w.return)} · ${daysText(daysUntil(w.depart))}`)),
+      h("div", {class: "right"},
+        h("div", {class: "price num"}, st.last != null ? inr(st.last) : "—"),
+        word ? h("div", {class: "word " + cls}, word) : null),
+      h("span", {class: "chev"}, icon(I_CHEV_R)));
+  });
+  return h("div", {class: "view"}, header(greeting(), "Your flights"),
+    rows.length ? h("nav", {class: "list", "aria-label": "Trips"}, rows) : h("div", {class: "empty"}, "No flights tracked yet."));
+}
+
+// ---------------- level 2: one trip ----------------
+function legRow(dir, leg) {
   const c = code(leg.flight);
-  return h("div", {class: "board-row"},
+  const next = leg.arr.slice(0, 10) > leg.dep.slice(0, 10);
+  return h("div", {class: "leg"},
     h("div", {class: "dir"}, dir),
-    h("div", {class: "date t"}, fWDM.format(dOnly(leg.dep.slice(0, 10)))),
-    h("div", {class: "times t"}, h("span", {class: "mdate"}, fWDM.format(dOnly(leg.dep.slice(0, 10)))),
-      hm(leg.dep), h("span", {class: "arr"}, "→"), hm(leg.arr), next ? h("sup", null, "+1") : null),
-    h("div", {class: "flight"}, logo(leg.flight), h("div", {style: "min-width:0"},
-      h("div", {class: "code"}, leg.flight), h("div", {class: "name"}, `${AIR[c] || c} · ${leg.from} → ${leg.to}`))),
-    h("div", {class: "dur t"}, h("b", null, dur(leg.minutes)), h("span", null, "Direct")));
+    h("div", null, h("div", {class: "date"}, fWDM.format(dOnly(leg.dep.slice(0, 10)))),
+      h("div", {class: "times"}, hm(leg.dep), h("span", {class: "to"}, "→"), hm(leg.arr), next ? h("sup", null, "+1") : null)),
+    h("div", {class: "dur"}, dur(leg.minutes), h("br"), "Direct"),
+    h("div", {class: "meta"}, logo(leg.flight), h("span", {class: "code"}, leg.flight),
+      h("span", {class: "rest"}, `${AIR[c] || c} · ${leg.from} → ${leg.to}`)));
 }
-function board(w) {
-  const legs = (w.current && w.current.legs) || [];
-  const fl = w.flights || [];
-  const rows = [boardRow("OUT", legs[0], w.depart, fl[0], w.from, w.to)];
-  if (w.return) rows.push(boardRow("BACK", legs[1], w.return, fl[1], w.to, w.from));
-  return h("div", {class: "board"}, rows);
+function board(option) {
+  const legs = (option && option.legs) || [];
+  if (!legs.length) return h("div", {class: "board"}, h("div", {class: "leg"}, h("div", {class: "dir"}, ""), h("div", {class: "date"}, "Flight times appear after the first check.")));
+  return h("div", {class: "board"}, legs.map((l, i) => legRow(i === 0 ? "OUT" : "BACK", l)));
 }
-
-// ---- options: every acceptable combination (e.g. either outbound, any return) ----------
-function optionsBlock(w) {
-  const ch = w.choices || [];
-  if (ch.length < 2) return null;
-  const pattern = w.flights || [];
-  const preferred = f => pattern.some(p => p.includes("|") && p.split("|")[0] === f);
-  const best = Math.min(...ch.map(c => c.price));
-  const legCell = (leg, f, cls) => h("div", {class: "leg " + cls}, logo(f), h("div", {style: "min-width:0"},
-    h("b", {class: "t"}, leg ? `${hm(leg.dep)} → ${hm(leg.arr)}` : f),
-    h("small", null, (leg ? fW.format(dOnly(leg.dep.slice(0, 10))) + " · " : "") + `${f} · ${AIR[code(f)] || code(f)}`,
-      preferred(f) ? h("span", {class: "pref"}, " · preferred") : null)));
-  const SHOW = 3;
-  const rows = ch.map((c, i) => h("div", {class: "opt" + (c.price === best ? " best" : ""), hidden: i >= SHOW},
-      legCell((c.legs || [])[0], c.flights[0], "out"), legCell((c.legs || [])[1], c.flights[1], "back"),
-      h("div", {class: "price num"}, inr(c.price), h("small", null, c.price === best ? "Cheapest" : "+" + inr(c.price - best)))));
-  const more = ch.length > SHOW ? h("button", {class: "show-all", type: "button", onclick: () => {
-      const showing = more.dataset.open === "1";
-      rows.forEach((r, i) => { if (i >= SHOW) r.hidden = showing; });
-      more.dataset.open = showing ? "0" : "1";
-      more.textContent = showing ? `Show all ${ch.length} options` : "Show fewer";
-    }}, `Show all ${ch.length} options`) : null;
-  return h("div", {class: "options"}, h("div", {class: "caps"}, "Your options · round-trip price"), rows, more);
+function priceBlock(w, which) {
+  const st = w.state || {}, a = w.advice;
+  const pick = yourPick(w);
+  const price = which === "pick" && pick ? pick.price : st.last;
+  const option = which === "pick" && pick ? pick : w.current;
+  const [pcls] = a ? {book: ["p-book"], fair: ["p-fair"], wait: ["p-wait"]}[a.verdict] : [""];
+  const block = h("div", {class: "pad price-block"});
+  if (pick && w.current && pick.price !== w.current.price) {
+    const seg = h("div", {class: "seg", role: "tablist", "aria-label": "Which flights"},
+      [["pick", "Your pick"], ["cheapest", "Cheapest"]].map(([k, label]) => h("button", {type: "button", role: "tab",
+        "aria-selected": String(k === which), onclick: () => { state.which[w.id] = k; render(); }}, label)));
+    block.append(seg);
+    const diff = pick.price - w.current.price;
+    block.append(h("div", {class: "seg-note"}, which === "pick"
+      ? `Your preferred ${w.flights[preferredIndex(w)].split("|")[0]} · ${inr(diff)} more than the cheapest`
+      : `The cheapest acceptable flights · ${inr(diff)} less than your pick`));
+  }
+  block.append(...[
+    h("div", {class: "big num"}, price != null ? inr(price) : "—"),
+    h("div", {class: "sub"}, `${w.return ? "Round trip" : "One way"} · 1 adult · ${(w.checked_at || D.updated_at) ? "checked " + ago(t(w.checked_at || D.updated_at)) : "not checked yet"}`),
+    st.misses ? h("div", {class: "pill p-wait"}, "Not found on the last check") : null,
+    a ? h("div", {class: "pill " + pcls}, a.title) : null,
+    a ? h("p", {class: "reason"}, a.summary) : null,
+    w.target ? h("p", {class: "reason"}, `You'll get a Telegram alert if it reaches ${inr(w.target)}.`) : null].filter(Boolean));
+  return [block, board(option)];
 }
-function preferenceNote(w) {
-  const pattern = w.flights || [];
-  const i = pattern.findIndex(p => p.includes("|"));
-  if (i < 0 || !w.current || !w.choices || !w.choices.length) return null;
-  const pref = pattern[i].split("|")[0];
-  if (w.current.flights[i] === pref) return h("div", {class: "note"}, `Your preferred ${pref} is also the cheapest way.`);
-  const prefBest = Math.min(...w.choices.filter(c => c.flights[i] === pref).map(c => c.price));
-  if (!isFinite(prefBest)) return h("div", {class: "note"}, `Your preferred ${pref} wasn't found on the last check.`);
-  return h("div", {class: "note"}, `Cheapest is with ${w.current.flights[i]}. Your preferred ${pref} is ${inr(prefBest - w.current.price)} more (${inr(prefBest)}).`);
-}
-
-// ---- book or wait (dashboard only) ------------------------------------------------------
-function adviceBlock(w) {
-  const a = w.advice;
-  if (!a) return null;
-  const pos = Math.max(2, Math.min(98, a.score));
-  const body = h("div", {hidden: true});
-  let built = false;
-  const toggle = h("button", {class: "toggle", type: "button", "aria-expanded": "false", onclick: () => {
-    const open = toggle.getAttribute("aria-expanded") !== "true";
-    toggle.setAttribute("aria-expanded", String(open)); body.hidden = !open;
-    if (open && !built) {
-      built = true;
-      body.append(
-        h("ul", {class: "reasons"}, a.reasons.map(r => h("li", null,
-          h("span", {class: "lean lean-" + r.toward, title: r.toward === "book" ? "Points to booking" : r.toward === "wait" ? "Points to waiting" : "Neutral"},
-            r.toward === "book" ? "BOOK" : r.toward === "wait" ? "WAIT" : "—"), h("span", null, r.text)))),
-        googleChart(w),
-        h("div", {class: "method"}, "A guide, not a guarantee. Built from Google Flights' typical range for this trip " +
-          "(its last 12 months), Google's last 60 days of prices, how your dates compare with other weeks, and the " +
-          "days left. Prices are the cheapest direct round trip on any airline for your dates."));
-    }
-  }}, "Why?", icon(I_CHEV));
-  const zone = a.verdict;
-  return h("div", {class: "advice " + zone},
-    h("div", {class: "advice-top"}, h("h3", null, a.title), h("span", {class: "caps"}, "Book or wait?")),
-    h("p", {class: "sum"}, a.summary),
-    h("div", {class: "scale", role: "img", "aria-label": `${a.title}: ${a.score} out of 100 toward waiting`},
-      h("span"), h("span"), h("span"), h("div", {class: "knob", style: `left:${pos}%`})),
-    h("div", {class: "scale-labels"}, h("span", {class: zone === "book" ? "on" : ""}, "Book now"),
-      h("span", {class: zone === "fair" ? "on" : ""}, "Fair"), h("span", {class: zone === "wait" ? "on" : ""}, "Wait")),
-    h("div", {class: "why"}, toggle, body));
-}
-function googleChart(w) {
+function historyChart(w) {
   const g = w.google;
-  if (!g || !(g.history || []).length) return null;
-  const pts = g.history.map(([d, p]) => [dOnly(d).getTime(), p]);
+  const pts = g && (g.history || []).length ? g.history.map(([d, p]) => [dOnly(d).getTime(), p])
+    : (w.points || []).map(([ts, p]) => [t(ts), p]).filter(p => p[1] != null);
+  if (pts.length < 2) return null;
   const wrap = h("div", {class: "chart"});
+  const tip = h("div", {class: "tip", hidden: true}); wrap.append(tip);
   const draw = () => {
     const old = wrap.querySelector("svg"); if (old) old.remove();
-    const W = wrap.clientWidth || 600, H = 150, ml = 44, mr = 6, mt = 12, mb = 20;
+    const W = wrap.clientWidth || 600, H = 200, ml = 46, mr = 8, mt = 16, mb = 24;
     const x0 = pts[0][0], x1 = Math.max(pts[pts.length - 1][0], x0 + DAY);
-    let lo = Math.min(g.low, ...pts.map(p => p[1])), hi = Math.max(g.high, ...pts.map(p => p[1]));
+    let lo = Math.min(...pts.map(p => p[1]), g ? g.low : Infinity), hi = Math.max(...pts.map(p => p[1]), g ? g.high : 0);
     const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
     const X = x => ml + (x - x0) / (x1 - x0) * (W - ml - mr), Y = v => mt + (1 - (v - lo) / (hi - lo)) * (H - mt - mb);
     const svg = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img",
-      "aria-label": `Google's last ${pts.length} days: from ${inr(pts[0][1])} to ${inr(pts[pts.length - 1][1])}; typical ${inr(g.low)} to ${inr(g.high)}`});
-    svg.append(s("rect", {x: ml, width: W - ml - mr, y: Y(g.high), height: Y(g.low) - Y(g.high), class: "band"}),
-      s("text", {x: W - mr - 4, y: Y(g.high) + 13, "text-anchor": "end", class: "band-label"}, `Typical ${inrK(g.low)}–${inrK(g.high)}`));
-    for (const v of [g.low, g.high]) svg.append(s("text", {x: ml - 6, y: Y(v) + 4, "text-anchor": "end", class: "tick"}, inrK(v)));
+      "aria-label": `Price over the last ${pts.length} days: from ${inr(pts[0][1])} to ${inr(pts[pts.length - 1][1])}` + (g ? `; typical ${inr(g.low)} to ${inr(g.high)}` : "")});
+    if (g) {
+      svg.append(s("rect", {x: ml, width: W - ml - mr, y: Y(g.high), height: Y(g.low) - Y(g.high), class: "band"}),
+        s("text", {x: W - mr - 6, y: Y(g.low) - 6, "text-anchor": "end", class: "band-label"}, "Typical price range"));
+      for (const v of [g.low, g.high]) svg.append(s("text", {x: ml - 6, y: Y(v) + 4, "text-anchor": "end", class: "tick"}, inrK(v)));
+    } else for (const v of [Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[1]))])
+      svg.append(s("line", {x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), class: "grid"}), s("text", {x: ml - 6, y: Y(v) + 4, "text-anchor": "end", class: "tick"}, inrK(v)));
     let d = ""; pts.forEach(([ts, p], k) => { d += k ? `H${X(ts)}V${Y(p)}` : `M${X(ts)},${Y(p)}`; });
     const last = pts[pts.length - 1];
-    svg.append(s("path", {d, fill: "none", stroke: "var(--navy)", "stroke-width": 2, "stroke-linejoin": "round"}),
-      s("circle", {cx: X(last[0]), cy: Y(last[1]), r: 4, fill: "var(--navy)", stroke: "var(--inset)", "stroke-width": 2}),
+    svg.append(s("path", {d, fill: "none", stroke: "var(--navy)", "stroke-width": 2.5, "stroke-linejoin": "round"}),
+      s("circle", {cx: X(last[0]), cy: Y(last[1]), r: 5, fill: "var(--navy)", stroke: "var(--panel)", "stroke-width": 2}),
+      s("text", {x: X(last[0]) - 10, y: Y(last[1]) - 10, "text-anchor": "end", class: "tick now"}, inr(last[1])),
       s("text", {x: ml, y: H - 4, class: "tick"}, fDM.format(new Date(x0))),
       s("text", {x: W - mr, y: H - 4, "text-anchor": "end", class: "tick"}, "Today"));
-    wrap.prepend(svg);
-  };
-  requestAnimationFrame(draw);
-  new ResizeObserver(() => { if (wrap.isConnected) draw(); }).observe(wrap);
-  return h("div", {class: "gchart"}, h("div", {class: "caps"}, `Google's last ${pts.length} days for your dates`), wrap);
-}
-
-// ---- how your dates compare (dashboard only) ------------------------------------------
-const median = a => { const b = [...a].sort((x, y) => x - y); const n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : null; };
-const significant = (save, base) => save >= Math.max(1000, base * 0.05);
-function compareBlock(w) {
-  const ins = w.insights;
-  if (!ins || !(ins.similar || []).length) return null;
-  const others = ins.similar.filter(x => x.depart !== w.depart).map(x => x.price);
-  const typical = median(others);
-  const yours = ins.yours;
-  const tripName = w.return ? `${fW.format(dOnly(w.depart))}–${fW.format(dOnly(w.return))}` : fW.format(dOnly(w.depart));
-  const chips = [];
-  if (yours != null && typical) {
-    const pct = Math.round((yours - typical) / typical * 100);
-    if (Math.abs(pct) < 5) chips.push(h("span", {class: "chip"}, `About what a ${tripName} trip usually costs`));
-    else if (pct > 0) chips.push(h("span", {class: pct >= 20 ? "chip bad" : "chip meh"}, `${pct}% above a typical ${tripName} trip`));
-    else chips.push(h("span", {class: "chip good"}, `${-pct}% below a typical ${tripName} trip`));
-  }
-  const near = (ins.nearby || []).filter(x => x.price != null && !(x.depart === w.depart && (x.return || null) === (w.return || null)));
-  const bestNear = near.reduce((a, b) => (!a || b.price < a.price) ? b : a, null);
-  const nearLabel = x => {
-    const parts = [];
-    if (x.depart !== w.depart) parts.push(`leave ${fW.format(dOnly(x.depart))}`);
-    if (w.return && x.return !== w.return) parts.push(`return ${fW.format(dOnly(x.return))}`);
-    return parts.join(", ");
-  };
-  if (yours != null && bestNear && significant(yours - bestNear.price, yours)) {
-    const label = nearLabel(bestNear);
-    chips.push(h("span", {class: "chip good"}, label.charAt(0).toUpperCase() + label.slice(1) + `: save ${inr(yours - bestNear.price)}`));
-  } else if (yours != null && near.length) chips.push(h("span", {class: "chip"}, "Your dates are about the cheapest nearby"));
-  const sug = ((w.google || {}).suggestions || [])[0];
-  if (sug && yours != null && significant(yours - sug.price, yours) &&
-      !(ins.nearby || []).some(x => x.depart === sug.depart && (x.return || null) === (sug.return || null))) {
-    const when = fWDM.format(dOnly(sug.depart)) + (sug.return ? " → " + fWDM.format(dOnly(sug.return)) : "");
-    chips.push(h("span", {class: "chip good"}, `Google suggests ${when}: ${inr(sug.price)}`));
-  }
-
-  const body = h("div", {class: "compare-body", hidden: true});
-  let built = false;
-  const toggle = h("button", {class: "toggle", type: "button", "aria-expanded": "false", onclick: () => {
-    const open = toggle.getAttribute("aria-expanded") !== "true";
-    toggle.setAttribute("aria-expanded", String(open)); body.hidden = !open;
-    if (open && !built) { built = true; body.append(...weeksChart(w, ins, typical, tripName), ...nearbyGrid(w, ins, yours)); }
-  }}, "Compare dates", icon(I_CHEV));
-  return h("div", {class: "compare"}, h("div", {class: "compare-head"}, chips, toggle), body);
-}
-function weeksChart(w, ins, typical, tripName) {
-  const list = ins.similar;
-  const hi = Math.max(...list.map(x => x.price)), lo = Math.min(...list.map(x => x.price));
-  const cols = list.map(x => {
-    const mine = x.depart === w.depart;
-    const pct = 18 + 82 * (x.price - lo * 0.85) / (hi - lo * 0.85);
-    return h("div", {class: "wk" + (mine ? " yours" : x.price === lo ? " cheap" : ""),
-        title: `${fWDM.format(dOnly(x.depart))}${x.return ? " → " + fWDM.format(dOnly(x.return)) : ""}: ${inr(x.price)}`},
-      h("div", {class: "val"}, inrK(x.price)),
-      h("div", {class: "bar", style: `height:${Math.max(6, Math.min(100, pct))}%`}),
-      h("div", {class: "lbl"}, fDM.format(dOnly(x.depart)), mine ? h("br") : null, mine ? "yours" : null));
-  });
-  return [h("h4", null, `Same ${tripName} trip, other weeks`),
-    h("div", {class: "why"}, "Cheapest direct round trip on any airline · ±30 days around your dates"),
-    h("div", {class: "weeks", role: "img", "aria-label": list.map(x => `${fDM.format(dOnly(x.depart))} ${inr(x.price)}`).join(", ")}, cols),
-    typical ? h("div", {class: "typical"}, `Typical (median of the other weeks): `, h("b", {class: "num"}, inr(typical)),
-      ` · cheapest ${fDM.format(dOnly(list.find(x => x.price === lo).depart))} at `, h("b", {class: "num"}, inr(lo))) : null];
-}
-function nearbyGrid(w, ins, yours) {
-  const near = ins.nearby || [];
-  if (!near.length) return [];
-  const deps = [...new Set(near.map(x => x.depart))].sort();
-  const rets = [...new Set(near.map(x => x.return).filter(Boolean))].sort();
-  const find = (d, r) => near.find(x => x.depart === d && (x.return || null) === (r || null));
-  const cell = (d, r) => {
-    const x = find(d, r), mine = d === w.depart && (r || null) === (w.return || null);
-    if (!x || x.price == null) return h("div", {class: "cell na"}, "—");
-    const save = yours != null ? yours - x.price : 0;
-    const cls = "cell" + (mine ? " yours" : yours != null && significant(save, yours) ? " save" : "");
-    return h("div", {class: cls}, inrK(x.price),
-      h("small", null, mine ? "your dates" : yours == null ? "" : save > 0 ? `save ${inrK(save)}` : save < 0 ? `+${inrK(-save)}` : "same"));
-  };
-  const out = [h("h4", {style: "margin-top:18px"}, "A day earlier or later"),
-    h("div", {class: "why"}, "Cheapest direct round trip on any airline for each date pair")];
-  if (!rets.length) {
-    out.push(h("div", {class: "grid3", style: "grid-template-columns: repeat(3, minmax(0,1fr))"},
-      deps.map(d => h("div", {class: "hd"}, fWDM.format(dOnly(d)))), deps.map(d => cell(d, null))));
-    return out;
-  }
-  out.push(h("div", {class: "grid3"},
-    h("div", {class: "hd", style: "text-align:left"}, "Leave / Back"),
-    rets.map(r => h("div", {class: "hd"}, fWDM.format(dOnly(r)))),
-    deps.map(d => [h("div", {class: "rh"}, fWDM.format(dOnly(d))), rets.map(r => cell(d, r))])));
-  return out;
-}
-
-// ---- price history ------------------------------------------------------------------
-function chart(pts) {
-  const wrap = h("div", {class: "chart"});
-  if (!pts.length) { wrap.append(h("p", {class: "checked"}, "The graph fills in as prices are checked.")); return wrap; }
-  const tip = h("div", {class: "tip", hidden: true}); wrap.append(tip);
-  const end = Math.max(t(D.updated_at) || 0, pts[pts.length - 1][0]);
-  const draw = () => {
-    const old = wrap.querySelector("svg"); if (old) old.remove();
-    const W = wrap.clientWidth || 600, H = 190, ml = 44, mr = 6, mt = 24, mb = 22;
-    const x0 = pts[0][0], x1 = Math.max(end, x0 + HOUR);
-    let lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1]));
-    const pad = Math.max((hi - lo) * 0.15, hi * 0.015); lo -= pad; hi += pad;
-    const X = x => ml + (x - x0) / (x1 - x0) * (W - ml - mr), Y = v => mt + (1 - (v - lo) / (hi - lo)) * (H - mt - mb);
-    const svg = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `Price history from ${inr(pts[0][1])} to ${inr(pts[pts.length - 1][1])}`});
-    for (const v of [lo + pad, (lo + hi) / 2, hi - pad]) {
-      svg.append(s("line", {x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), class: "grid"}),
-        s("text", {x: ml - 6, y: Y(v) + 4, "text-anchor": "end", class: "tick"}, inrK(v)));
-    }
-    let d = ""; pts.forEach(([ts, p], k) => { d += k ? `H${X(ts)}V${Y(p)}` : `M${X(ts)},${Y(p)}`; }); d += `H${X(x1)}`;
-    svg.append(s("path", {d: d + `V${H - mb}H${X(x0)}Z`, fill: "var(--navy-wash)"}),
-      s("path", {d, fill: "none", stroke: "var(--navy)", "stroke-width": 2, "stroke-linejoin": "round"}),
-      s("text", {x: ml, y: H - 4, class: "tick"}, fISTd.format(new Date(x0))),
-      s("text", {x: W - mr, y: H - 4, "text-anchor": "end", class: "tick"}, "Now"));
     const cross = s("line", {y1: mt, y2: H - mb, class: "cross", visibility: "hidden"});
-    const dot = s("circle", {r: 4.5, fill: "var(--navy)", stroke: "var(--panel)", "stroke-width": 2, visibility: "hidden"});
+    const dot = s("circle", {r: 5, fill: "var(--navy)", stroke: "var(--panel)", "stroke-width": 2, visibility: "hidden"});
     svg.append(cross, dot);
     const move = ev => {
       const r = svg.getBoundingClientRect();
       const px = Math.max(ml, Math.min(W - mr, (ev.clientX - r.left) * W / r.width));
-      const x = x0 + (px - ml) / (W - ml - mr) * (x1 - x0), v = valueAt(pts, x) ?? pts[0][1];
+      const x = x0 + (px - ml) / (W - ml - mr) * (x1 - x0);
+      let v = pts[0]; for (const p of pts) if (p[0] <= x) v = p;
       cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("visibility", "visible");
-      dot.setAttribute("cx", px); dot.setAttribute("cy", Y(v)); dot.setAttribute("visibility", "visible");
-      tip.replaceChildren(h("b", null, inr(v)), " · " + fIST.format(new Date(x))); tip.hidden = false;
+      dot.setAttribute("cx", px); dot.setAttribute("cy", Y(v[1])); dot.setAttribute("visibility", "visible");
+      tip.replaceChildren(h("b", null, inr(v[1])), " · " + fDM.format(new Date(v[0]))); tip.hidden = false;
       const cx = px * r.width / W; tip.style.left = Math.min(Math.max(0, cx - tip.offsetWidth / 2), r.width - tip.offsetWidth) + "px";
     };
     svg.addEventListener("pointermove", move); svg.addEventListener("pointerdown", move);
@@ -613,91 +401,92 @@ function chart(pts) {
   };
   requestAnimationFrame(draw);
   new ResizeObserver(() => { if (wrap.isConnected) draw(); }).observe(wrap);
-  return wrap;
+  return h("section", {class: "panel pad section"}, h("h2", null, "Price over the last 60 days"),
+    h("p", {class: "lead"}, g ? `Cheapest direct round trip for your dates. Green is what this trip usually costs (${inr(g.low)}–${inr(g.high)}).`
+      : "Your tracked flights, since tracking began."), wrap);
 }
-
-// ---- one fare (one card) ----------------------------------------------------------------
-function fare(w) {
-  const st = w.state || {}, pts = points(w);
-  const [vcls, vtext] = verdict(w, pts);
-  const hist = h("div", {class: "history", hidden: true});
-  let built = false;
-  const toggle = h("button", {class: "toggle", type: "button", "aria-expanded": "false", onclick: () => {
-    const open = toggle.getAttribute("aria-expanded") !== "true";
-    toggle.setAttribute("aria-expanded", String(open)); hist.hidden = !open;
-    if (open && !built) {
-      built = true;
-      hist.append(chart(pts), h("div", {class: "facts"},
-        h("div", {class: "fact"}, h("span", null, "Lowest"), h("b", {class: "num"}, inr(st.low)), h("span", null, st.low_at ? fISTd.format(new Date(t(st.low_at))) : "")),
-        h("div", {class: "fact"}, h("span", null, "Highest"), h("b", {class: "num"}, inr(st.high))),
-        h("div", {class: "fact"}, h("span", null, "When tracking began"), h("b", {class: "num"}, inr(st.first)), h("span", null, st.first_at ? fISTd.format(new Date(t(st.first_at))) : ""))));
-    }
-  }}, "Price history", icon(I_CHEV));
-  return h("article", {class: "fare"},
-    h("div", {class: "fare-head"},
-      h("div", null,
-        h("div", {class: "who"}, w.who ? h("span", {class: "tag"}, w.who) : null,
-          h("span", {class: "caps"}, `${w.return ? "Round trip" : "One way"} · from ${city(w.from)}`)),
-        h("div", {class: "big num"}, st.last != null ? inr(st.last) : "—"),
-        h("div", {class: "verdict " + vcls}, vtext)),
-      h("div", {class: "side"}, change(w, pts), sparkline(pts)),
-      preferenceNote(w)),
-    adviceBlock(w),
-    board(w),
-    compareBlock(w),
-    optionsBlock(w),
-    h("div", {class: "more"},
-      h("div", null, toggle, h("div", {class: "checked"}, w.checked_at ? "Checked " + ago(t(w.checked_at)) : "Not checked yet")),
-      h("a", {class: "book", href: w.link, target: "_blank", rel: "noopener noreferrer"}, "Book ↗")),
-    hist);
+function howMuchMore(w) {
+  const ins = w.insights;
+  if (!ins || !(ins.similar || []).length || ins.yours == null) return null;
+  const others = ins.similar.filter(x => x.depart !== w.depart).map(x => x.price);
+  const typical = median(others);
+  if (!typical) return null;
+  const extra = ins.yours - typical, pct = Math.round(extra / typical * 100);
+  const name = w.return ? `${fW.format(dOnly(w.depart))}–${fW.format(dOnly(w.return))}` : fW.format(dOnly(w.depart));
+  const lead = Math.abs(pct) < 5 ? [`About what a ${name} trip usually costs (`, h("b", {class: "num"}, inr(typical)), ").`"]
+    : extra > 0 ? ["You're paying ", h("b", {class: "num"}, `${inr(extra)} (${pct}%) more`), ` than a typical ${name} trip (${inr(typical)}).`]
+    : ["You're paying ", h("b", {class: "num"}, `${inr(-extra)} (${-pct}%) less`), ` than a typical ${name} trip (${inr(typical)}).`];
+  const list = ins.similar, hi = Math.max(...list.map(x => x.price)), lo = Math.min(...list.map(x => x.price));
+  const bars = h("div", {class: "weeks", role: "img", "aria-label": list.map(x => `${fDM.format(dOnly(x.depart))}: ${inr(x.price)}`).join(", ")},
+    list.map(x => {
+      const mine = x.depart === w.depart;
+      const pctH = 18 + 82 * (x.price - lo * 0.85) / (hi - lo * 0.85);
+      return h("div", {class: "wk" + (mine ? " yours" : x.price === lo ? " cheap" : "")},
+        h("div", {class: "val"}, inrK(x.price)), h("div", {class: "bar", style: `height:${Math.max(6, Math.min(100, pctH))}%`}),
+        h("div", {class: "lbl"}, fDM.format(dOnly(x.depart)), mine ? h("br") : null, mine ? "yours" : null));
+    }));
+  // a day earlier or later, behind a tap
+  const near = ins.nearby || [];
+  let more = null;
+  if (near.length) {
+    const body = h("div", {hidden: true});
+    let built = false;
+    const btn = h("button", {class: "disclose", type: "button", "aria-expanded": "false", onclick: () => {
+      const open = btn.getAttribute("aria-expanded") !== "true";
+      btn.setAttribute("aria-expanded", String(open)); body.hidden = !open;
+      if (open && !built) { built = true; body.append(nearbyGrid(w, ins)); }
+    }}, "A day earlier or later", icon(I_CHEV_D));
+    more = [btn, body];
+  }
+  return h("section", {class: "panel pad section"}, h("h2", null, "How much more you're paying"), h("p", {class: "lead"}, lead),
+    bars, h("p", {class: "foot"}, `The same ${name} trip in other weeks within a month of yours · cheapest direct round trip on any airline.`), more);
 }
-
-function trip(tr) {
-  const ws = tr.watches.map(id => D.watches.find(w => w.id === id)).filter(Boolean);
-  const dest = ws.length ? ws[0].to : "", days = daysUntil(tr.start);
-  const route = [...new Set(ws.map(w => w.from))].join(" / ") + (ws.some(w => w.return) ? " ⇄ " : " → ") + dest;
-  const when = tr.start === tr.end ? fWDM.format(dOnly(tr.start))
-    : `${fW.format(dOnly(tr.start))} ${fDM.format(dOnly(tr.start))} – ${fW.format(dOnly(tr.end))} ${fDM.format(dOnly(tr.end))} ${dOnly(tr.end).getUTCFullYear()}`;
-  return h("section", {class: "trip"},
+function nearbyGrid(w, ins) {
+  const near = ins.nearby, yours = ins.yours;
+  const deps = [...new Set(near.map(x => x.depart))].sort();
+  const rets = [...new Set(near.map(x => x.return).filter(Boolean))].sort();
+  const find = (d, r) => near.find(x => x.depart === d && (x.return || null) === (r || null));
+  const cell = (d, r) => {
+    const x = find(d, r), mine = d === w.depart && (r || null) === (w.return || null);
+    if (!x || x.price == null) return h("div", {class: "cell na"}, "—");
+    const save = yours - x.price;
+    return h("div", {class: "cell" + (mine ? " yours" : significant(save, yours) ? " save" : "")}, inrK(x.price),
+      h("small", null, mine ? "your dates" : save > 0 ? `save ${inrK(save)}` : save < 0 ? `+${inrK(-save)}` : "same"));
+  };
+  if (!rets.length) return h("div", {class: "grid3", style: "grid-template-columns: repeat(3, minmax(0,1fr))"},
+    deps.map(d => h("div", {class: "hd"}, fWDM.format(dOnly(d)))), deps.map(d => cell(d, null)));
+  return h("div", {class: "grid3"}, h("div", {class: "hd", style: "text-align:left"}, "Leave / back"),
+    rets.map(r => h("div", {class: "hd"}, fWDM.format(dOnly(r)))),
+    deps.map(d => [h("div", {class: "rh"}, fWDM.format(dOnly(d))), rets.map(r => cell(d, r))]));
+}
+function tripView(w) {
+  const which = state.which[w.id] || "cheapest";
+  const days = daysUntil(w.depart);
+  return h("div", {class: "view"},
+    h("button", {class: "back", type: "button", onclick: () => history.length > 1 && location.hash ? history.back() : go(null)}, icon(I_CHEV_L), "All flights"),
     h("div", {class: "trip-head"},
-      h("div", null, h("div", {class: "caps"}, route), h("h2", null, tr.name || city(dest)), h("div", {class: "when"}, when)),
-      h("div", {class: "countdown"}, h("b", {class: "num"}, days > 0 ? days : days === 0 ? "Today" : "—"),
-        h("span", {class: "caps"}, days > 1 ? "days to go" : days === 1 ? "day to go" : ""))),
-    ws.map(fare));
+      h("div", {class: "route"}, routeText(w), w.who ? h("span", {class: "tag"}, w.who) : null),
+      h("h1", null, city(w.to)),
+      h("div", {class: "when"}, `${dateRange(w.depart, w.return)} · ${daysText(days)}`)),
+    h("section", {class: "panel"}, priceBlock(w, which)),
+    historyChart(w),
+    howMuchMore(w),
+    h("a", {class: "book", href: w.link, target: "_blank", rel: "noopener noreferrer"}, "Book on Google Flights ↗"));
 }
 
-function header() {
-  const sub = document.getElementById("sub"), dotEl = document.getElementById("dot");
-  const last = t(D.updated_at);
-  let warn = false;
-  if (D.failed_runs > 0) { sub.textContent = `Google didn't answer the last ${D.failed_runs} check${D.failed_runs === 1 ? "" : "s"} · retrying`; warn = true; }
-  else if (!last) sub.textContent = "Waiting for the first price check";
-  else {
-    const stale = Date.now() - last > 3 * (D.check_every_minutes || 30) * MIN;
-    sub.textContent = stale ? `Last updated ${ago(last)} · checks seem to have stopped` : `Live · updated ${ago(last)}`;
-    warn = stale;
-  }
-  dotEl.className = "dot" + (warn ? " warn" : "");
-  const actions = document.getElementById("actions");
-  actions.replaceChildren();
-  if (D.web) {
-    const btn = h("button", {class: "icon-btn", type: "submit", "aria-label": "Check prices now", title: "Check prices now"}, icon(I_REFRESH));
-    actions.append(
-      h("form", {method: "post", action: D.web.check_now, style: "margin:0", onsubmit: () => {
-        btn.classList.add("spin"); btn.disabled = true; sub.textContent = "Checking prices… up to a minute"; }}, btn),
-      h("details", {class: "menu"}, h("summary", {class: "icon-btn", "aria-label": "Menu", title: "Menu"}, icon(I_MORE)),
-        h("div", {class: "menu-pop"}, h("a", {href: D.web.setup}, "Setup"), h("a", {href: D.web.logout}, "Log out"))));
-  }
-  const notice = document.getElementById("notice");
-  notice.replaceChildren();
-  const text = (D.web && D.web.notice) || (D.demo ? "Preview with made-up price history." : "");
-  if (text) notice.append(h("div", {class: "notice"}, text));
+// ---------------- navigation ----------------
+const state = {which: {}};
+function current() { const m = location.hash.match(/^#\/trip\/(.+)$/); return m ? D.watches.find(w => w.id === decodeURIComponent(m[1])) : null; }
+function go(id) { if (id) location.hash = "#/trip/" + encodeURIComponent(id); else history.pushState(null, "", location.pathname + location.search); render(); }
+function render() {
+  const w = current();
+  document.getElementById("app").replaceChildren(w ? tripView(w) : listView());
+  document.title = w ? `${city(w.to)} · Flight Prices` : "Flight Prices";
 }
-
-header();
-document.getElementById("trips").replaceChildren(...((D.trips || []).length ? D.trips.map(trip)
-  : [h("div", {class: "empty"}, "No flights tracked yet.")]));
-setInterval(() => { if (!document.querySelector(".spin")) header(); }, MIN);
+window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
+window.addEventListener("popstate", render);
+render();
+setInterval(() => { if (!document.querySelector(".spin") && !current()) render(); }, MIN);
 </script>
 </body>
 </html>
