@@ -84,6 +84,8 @@ def _problem(e: Exception | None) -> str:
     _last_problem = text
     return text
 PAUSE_BETWEEN_SEARCHES = 1
+PAUSE_BETWEEN_DATES = 3  # date comparisons load many pages: go slowly
+DATE_PRICES_KEY = "_date_prices"  # inside the saved comparisons: each date's price and when it was loaded
 # Round trips: Google's outbound list already shows each outbound flight's
 # cheapest round-trip price, so returns are priced only for the watched
 # outbound flights plus this many of the cheapest ones.
@@ -1126,12 +1128,7 @@ def trip_insights(w: Watch, settings: dict, today: date, grid_fn=None) -> dict |
     """How a watch's dates compare: the same trip on the same weekday within
     30 days either side, and leaving or returning one day earlier or later.
     Prices are the cheapest direct option on any airline for each date pair."""
-    live = grid_fn is None
     grid_fn = grid_fn or _date_grid
-
-    def pause():  # between live page loads only (not for the demo or tests)
-        if live:
-            time.sleep(PAUSE_BETWEEN_SEARCHES)
     dep = date.fromisoformat(w.depart)
     ret = date.fromisoformat(w.ret) if w.ret else None
     days = (ret - dep).days if ret else None
@@ -1147,7 +1144,6 @@ def trip_insights(w: Watch, settings: dict, today: date, grid_fn=None) -> dict |
         if out_of_time():
             return None  # finished on a later run
         grid.update(grid_fn(w.origin, w.destination, d, d, days, settings))
-        pause()
         d += timedelta(days=7)
     if not grid:
         return None
@@ -1173,7 +1169,6 @@ def trip_insights(w: Watch, settings: dict, today: date, grid_fn=None) -> dict |
                 if out_of_time():
                     return None  # finished on a later run
                 grid.update(grid_fn(w.origin, w.destination, d, d, length, settings))
-                pause()
             nearby.append({"depart": d.isoformat(), "return": r.isoformat() if r else None,
                            "price": grid.get(pair(d, r))})
     nearby.sort(key=lambda x: (x["depart"], x["return"] or ""))
@@ -1308,6 +1303,26 @@ def refresh_insights(active: list[Watch], settings: dict, store, now_dt: datetim
     """Recompute comparisons older than insights_every_hours, while the run's
     time budget lasts. Returns the full current set (old ones kept on failure)."""
     current = dict(store.load_latest().get("insights", {}))
+    # Each date's price is remembered for a day, so a comparison (one page per
+    # date) can be spread over several short runs without loading a page twice.
+    prices = dict(current.pop(DATE_PRICES_KEY, None) or {})
+    for k in [k for k, (_, at) in prices.items() if (now_dt - datetime.fromisoformat(at)).total_seconds() > 2 * 86400]:
+        del prices[k]
+
+    def remembered_grid(origin, destination, start, end, days, settings):
+        if start != end:
+            return _date_grid(origin, destination, start, end, days, settings)
+        r = start + timedelta(days=days) if days else None
+        dates = (start.isoformat(),) + ((r.isoformat(),) if r else ())
+        k = "|".join((origin, destination) + dates)
+        hit = prices.get(k)
+        if hit and (now_dt - datetime.fromisoformat(hit[1])).total_seconds() < settings["insights_every_hours"] * 3600:
+            return {dates: hit[0]}
+        out = _date_grid(origin, destination, start, end, days, settings)
+        if dates in out:
+            prices[k] = [out[dates], now_dt.isoformat()]
+        time.sleep(PAUSE_BETWEEN_DATES)
+        return out
     wanted = {}
     for w in active:
         if not w.flexible:
@@ -1325,7 +1340,7 @@ def refresh_insights(active: list[Watch], settings: dict, store, now_dt: datetim
             break
         log(f"Comparing dates for {w.origin}->{w.destination} {w.depart}" + (f" to {w.ret}" if w.ret else ""))
         try:
-            result = trip_insights(w, settings, now_dt.date())
+            result = trip_insights(w, settings, now_dt.date(), grid_fn=remembered_grid)
         except ConfigError:
             raise
         except Exception as e:
@@ -1338,6 +1353,7 @@ def refresh_insights(active: list[Watch], settings: dict, store, now_dt: datetim
             break
         else:
             current[sid] = {**info, "ok": False, "failed_at": now_dt.isoformat()}  # keep the last good numbers
+    current[DATE_PRICES_KEY] = prices
     return current
 
 

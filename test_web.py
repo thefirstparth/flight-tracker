@@ -211,6 +211,29 @@ class CheckLoop(unittest.TestCase):
         self.assertNotIn("pause_until", g["checkers"][tracker.CHECKER])
         self.assertTrue(g["last_answer_at"])
 
+    def test_date_comparison_spreads_over_runs(self):
+        loads = []
+
+        def counted(origin, destination, start, end, days, settings):
+            loads.append((origin, start, days))
+            return fake_grid(origin, destination, start, end, days, settings)
+        _, watches = tracker.load_config(CONFIG)
+        settings = dict(tracker.DEFAULT_SETTINGS)
+        now = tracker.datetime(2026, 11, 27, 6, 0, tzinfo=tracker.IST)
+        with mock.patch.object(tracker, "_date_grid", side_effect=counted):
+            with mock.patch.object(tracker, "out_of_time", side_effect=lambda: len(loads) >= 5):
+                first = tracker.refresh_insights(watches, settings, self.store, now)
+            self.assertFalse(any(v.get("ok") for k, v in first.items() if k != tracker.DATE_PRICES_KEY))
+            self.store.save_latest({"insights": first})
+            done_before = len(loads)
+            second = tracker.refresh_insights(watches, settings, self.store, now)
+        sid = watches[0].search_id
+        self.assertTrue(second[sid]["ok"])
+        self.assertTrue(second[sid]["similar"])
+        starts = [x for x in loads[done_before:]]
+        self.assertEqual(len(set(starts)), len(starts))  # no date loaded twice in the second run
+        self.assertFalse(set(loads[:done_before]) & set(loads[done_before:]))  # nor again after the first
+
     def test_budget_cut_does_not_count_as_missing(self):
         budget = {"used_up": False}
 
