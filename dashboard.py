@@ -105,6 +105,7 @@ def collect(config: Path, store) -> dict:
         "generated_at": datetime.now(tracker.IST).replace(microsecond=0).isoformat(),
         "updated_at": state.get("updated_at"),
         "failed_runs": state.get("failed_runs", 0),
+        "google_status": state.get("google") or {},
         "check_every_minutes": settings["check_every_minutes"],
         "owner": settings["owner_name"],
         "rules": {k: settings[k] for k in ("drop_alert_rupees", "drop_alert_percent",

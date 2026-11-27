@@ -47,11 +47,34 @@ HERE = Path(__file__).resolve().parent
 os.environ.setdefault("FLI_TIMEOUT", "6")
 IST = timezone(timedelta(hours=5, minutes=30))
 
-# Google answers about half of all requests with a short error, at random
-# (measured from this computer and from Vercel), so every request is retried
-# quickly: waiting longer does not help.
-SEARCH_ATTEMPTS = 6
-RETRY_WAIT_SECONDS = (1, 1.5, 2, 3, 5)
+# Google answers some requests with a short error, at random, so a request is
+# retried a couple of times. More than that only makes Google refuse for longer:
+# when a search gets no answer at all, the run stops and the next runs pause
+# (BACKOFF_MINUTES), so a refusing Google is left alone instead of hammered.
+SEARCH_ATTEMPTS = 3
+RETRY_WAIT_SECONDS = (1, 2)
+BACKOFF_MINUTES = (20, 40, 60)  # pause after 1, 2, 3+ runs in a row with no answer
+_last_problem: str | None = None  # what the last failed request looked like, for logs and status
+
+
+def _problem(e: Exception | None) -> str:
+    """A short description of why Google gave no prices: rate limit, other HTTP error, timeout or empty."""
+    global _last_problem
+    if e is None:
+        text = "empty answer (Google refused or returned nothing)"
+    else:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        msg = str(e)
+        if status == 429 or "429" in msg:
+            text = "HTTP 429: rate limited by Google"
+        elif status:
+            text = f"HTTP {status}"
+        elif "timeout" in type(e).__name__.lower() or "timed out" in msg.lower():
+            text = "timed out"
+        else:
+            text = type(e).__name__
+    _last_problem = text
+    return text
 PAUSE_BETWEEN_SEARCHES = 1
 # Round trips: Google's outbound list already shows each outbound flight's
 # cheapest round-trip price, so returns are priced only for the watched
@@ -101,7 +124,7 @@ DEFAULT_SETTINGS = {
     "daily_summary": False,
     # Dashboard-only comparisons: similar trips within +/- 30 days and +/- 1 day.
     "insights": True,
-    "insights_every_hours": 12,
+    "insights_every_hours": 24,
     "owner_name": "",  # shown in the dashboard greeting, e.g. "Parth"
 }
 
@@ -455,8 +478,11 @@ def _with_retries(fn, what: str):
         try:
             result = fn()
         except Exception as e:
-            log(f"    {what}, try {attempt + 1}: {type(e).__name__}: {e}")
+            log(f"    {what}, try {attempt + 1}: {_problem(e)} ({type(e).__name__}: {str(e)[:120]})")
             result = None
+        else:
+            if not result:
+                log(f"    {what}, try {attempt + 1}: {_problem(None)}")
         if result:
             return result
         if out_of_time():
@@ -515,10 +541,12 @@ def fetch_options(key: tuple, settings: dict, needed: set[tuple], search=_search
         except ConfigError:
             raise
         except Exception as e:  # network trouble or a changed response format
-            log(f"    attempt {attempt + 1}: {type(e).__name__}: {e}")
+            log(f"    attempt {attempt + 1}: {_problem(e)} ({type(e).__name__}: {str(e)[:120]})")
             options = []
         if not options:
             log(f"    attempt {attempt + 1}: no results")
+            if key[3] and not merged:
+                break  # each request inside was already retried: Google is refusing, stop here
         for o in options:
             if o.flights not in merged or o.price < merged[o.flights].price:
                 merged[o.flights] = o
@@ -842,13 +870,20 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
 
     Returns a small report: searches checked, alerts sent, exit code.
     """
-    global _deadline
+    global _deadline, _last_problem
     _deadline = time.monotonic() + budget
     settings, watches = load_config(Path(config))
     state = store.load_state()
     now_dt = datetime.now(IST).replace(microsecond=0)
     now = now_dt.isoformat()
-    report = {"checked": 0, "answered": 0, "alerts": 0, "exit_code": 0, "skipped_busy": False}
+    report = {"checked": 0, "answered": 0, "alerts": 0, "exit_code": 0, "skipped_busy": False, "paused": False}
+    gstat = state.setdefault("google", {})
+    pause_until = gstat.get("pause_until")
+    if pause_until and not force and now_dt < datetime.fromisoformat(pause_until):
+        log(f"Google refused recently ({gstat.get('last_problem', 'no answer')}); "
+            f"pausing until {pause_until[11:16]} IST. Nothing searched this run.")
+        report["paused"] = True
+        return report
 
     active = [w for w in watches if w.last_date >= now_dt.date().isoformat()]
     for w in watches:
@@ -868,6 +903,7 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
 
     results: dict[tuple, list[Option] | None] = {}
     incomplete: set[tuple] = set()
+    refused = False
     google: dict[str, dict] = {}  # Google's price insight per search, from this run
     for i, key in enumerate(due):
         if out_of_time():
@@ -878,6 +914,7 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
         if i:
             time.sleep(PAUSE_BETWEEN_SEARCHES)
         _google_insights.pop(key, None)
+        _last_problem = None
         results[key] = fetch_options(key, settings, needed[key])
         if key in _google_insights:
             google[search_id(key)] = {"checked_at": now, **_google_insights.pop(key)}
@@ -889,8 +926,26 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
         searches[search_id(key)] = {"checked_at": now, "ok": results[key] is not None and key not in incomplete}
         n = len(results[key] or [])
         log(f"  {n} direct option(s)" if n else "  no answer from Google after retries")
+        if results[key] is None:
+            refused = True
+            left = len(due) - i - 1
+            if left:
+                log(f"Google is not answering: stopping this run; {left} other search(es) wait.")
+            break
     report["checked"] = len(results)
     report["answered"] = sum(1 for v in results.values() if v)
+    if results:
+        if report["answered"]:
+            gstat.update({"last_answer_at": now, "refused_runs": 0})
+            gstat.pop("pause_until", None)
+        else:
+            n_refused = gstat.get("refused_runs", 0) + 1
+            wait = BACKOFF_MINUTES[min(n_refused, len(BACKOFF_MINUTES)) - 1]
+            gstat.update({"refused_runs": n_refused, "last_problem": _last_problem or "no answer",
+                          "last_problem_at": now,
+                          "pause_until": (now_dt + timedelta(minutes=wait)).isoformat()})
+            log(f"No answer from Google ({gstat['last_problem']}), {n_refused} run(s) in a row: "
+                f"pausing {wait} minutes.")
 
     messages, history_rows, event_rows = [], [], []
     wstate = state.setdefault("watches", {})
@@ -966,7 +1021,7 @@ def check(config: Path, store, *, summary: bool = False, force: bool = False, dr
 
     # Dashboard-only comparisons, after the prices and only while time remains.
     insights = None
-    if settings["insights"] and not dry_run:
+    if settings["insights"] and not dry_run and not refused:  # never while Google is refusing
         insights = refresh_insights(active, settings, store, now_dt)
 
     allowed = set(settings["alerts"]) | ({"summary"} if summary else set())
@@ -1104,14 +1159,21 @@ def book_or_wait(google: dict | None, comparison: dict | None, depart: str, toda
 
     # Peak dates first: if the dates are a holiday or long weekend, "above the
     # typical range" is largely that same fact, so it counts for less.
-    peak_pct = None
+    # And if most nearby weeks are above Google's range too, the whole season is
+    # pricier than usual: "above the range" is not about your dates, so it also
+    # counts for less, and the sentence says so (no "wait" next to "cheaper
+    # than other weeks" without an explanation).
+    peak_pct = cheap_pct = typical_week = None
     if comparison and comparison.get("yours") and comparison.get("similar"):
         others = [x["price"] for x in comparison["similar"] if x["depart"] != depart and x.get("price")]
-        typical_week = _median(others)
-        if len(others) >= 3 and typical_week:
+        if len(others) >= 3:
+            typical_week = _median(others)
             pct = (comparison["yours"] - typical_week) / typical_week
             if pct >= 0.25:
                 peak_pct = pct
+            elif pct <= -0.08:
+                cheap_pct = -pct
+    season_high = typical_week is not None and peak_pct is None and typical_week > high
 
     span = f"{inr(low)}–{inr(high)}"
     if now < low:
@@ -1121,6 +1183,10 @@ def book_or_wait(google: dict | None, comparison: dict | None, depart: str, toda
         if peak_pct is not None:
             add(points / 2, f"{inr(now)} is above Google's typical range for this trip ({span}), "
                             "largely because of the peak dates.")
+        elif season_high:
+            add(points / 2, f"{inr(now)} is above Google's typical range for this trip ({span}), but so are "
+                            f"most weeks around it (typical {inr(typical_week)}): the whole season costs more "
+                            "than usual right now.")
         else:
             add(points, f"{inr(now)} is above Google's typical range for this trip ({span}).")
     else:
@@ -1145,6 +1211,10 @@ def book_or_wait(google: dict | None, comparison: dict | None, depart: str, toda
     if peak_pct is not None:
         add(-12, f"Your dates cost {round(peak_pct * 100)}% more than the same trip in other weeks: a peak "
                  "(holiday or long weekend), and peak dates rarely get cheaper closer in.")
+
+    if cheap_pct is not None:
+        add(-8, f"Your dates are {round(cheap_pct * 100)}% cheaper than the same trip in other weeks "
+                f"({inr(typical_week)} in a typical week), so changing dates is unlikely to save.")
 
     if days < 21:
         add(-25, f"{days} days to go: fares usually rise in the last three weeks.")
